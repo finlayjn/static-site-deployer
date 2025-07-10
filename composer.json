@@ -1,0 +1,22 @@
+{
+    "name": "finlayjn/static-site-deployer",
+    "version": "0.0.1",
+    "autoload": {
+        "psr-4": {
+            "Finlayjn\\StaticSiteDeployer\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Finlay Nathan",
+            "email": "52335224+finlayjn@users.noreply.github.com"
+        }
+    ],
+    "require-dev": {
+        "johnpbloch/wordpress-core": "^6.8",
+        "simplystatic/simply-static": "^3.3"
+    },
+    "require": {
+        "symfony/mime": "^7.3"
+    }
+}
