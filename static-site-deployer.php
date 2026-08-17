@@ -21,14 +21,8 @@ define( 'SSD_PLUGIN_FILE', __FILE__ );
 define( 'SSD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SSD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-// Composer dependencies (symfony/mime). Bundled in release builds.
-$ssd_autoload = SSD_PLUGIN_DIR . 'vendor/autoload.php';
-if ( is_readable( $ssd_autoload ) ) {
-	require_once $ssd_autoload;
-}
-
-// Lightweight autoloader for the plugin's own SSD\* classes, so the plugin
-// works even when composer's autoloader has not been regenerated.
+// Autoloader for the plugin's own SSD\* classes. The plugin has no third-party
+// runtime dependencies.
 spl_autoload_register(
 	function ( $class ) {
 		if ( 0 !== strpos( $class, 'SSD\\' ) ) {

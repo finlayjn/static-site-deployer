@@ -83,10 +83,11 @@ Playground from a committed archive.
 ## Development
 
 ```bash
-composer install       # dev dependencies (WordPress core stubs, Simply Static)
-tests/run.sh           # lint + unit tests (no WordPress required)
-bin/build.sh           # produce dist/static-site-deployer.zip with vendor bundled
+tests/run.sh   # lint + unit tests (no WordPress or dependencies required)
+bin/build.sh   # produce dist/static-site-deployer.zip
 ```
+
+The plugin has no runtime dependencies, so no composer/vendor step is needed.
 
 ## Motivation
 

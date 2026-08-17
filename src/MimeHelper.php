@@ -2,8 +2,6 @@
 
 namespace SSD;
 
-use Symfony\Component\Mime\MimeTypes;
-
 class MimeHelper
 {
     protected static array $extMap = [
@@ -41,12 +39,17 @@ class MimeHelper
             return self::$extMap[$ext];
         }
 
-        // If local file exists, let Symfony / finfo try
-        if (is_file($filePath)) {
-            $mimeTypes = new MimeTypes();
-            $guessed = $mimeTypes->guessMimeType($filePath);
-            if ($guessed && $guessed !== 'text/plain') {
-                return $guessed;
+        // Fall back to PHP's fileinfo for existing files with an unrecognized
+        // extension. Common web-asset types are handled by the map above.
+        if (is_file($filePath) && function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if (false !== $finfo) {
+                $guessed = finfo_file($finfo, $filePath);
+                finfo_close($finfo);
+                if (is_string($guessed) && '' !== $guessed
+                    && 'application/x-empty' !== $guessed && 'text/plain' !== $guessed) {
+                    return $guessed;
+                }
             }
         }
 

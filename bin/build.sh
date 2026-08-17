@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# Builds a distributable plugin archive with production dependencies bundled.
+# Builds a distributable plugin archive.
 #
 # Produces dist/static-site-deployer.zip containing a single top-level
-# `static-site-deployer/` directory. Requires composer.
+# `static-site-deployer/` directory. The plugin has no runtime dependencies.
 #
 # Usage: bin/build.sh
 
@@ -15,21 +15,14 @@ DIST_DIR="${ROOT_DIR}/dist"
 STAGE_DIR="${DIST_DIR}/${SLUG}"
 ZIP_PATH="${DIST_DIR}/${SLUG}.zip"
 
-command -v composer >/dev/null 2>&1 || { echo "error: composer is required" >&2; exit 1; }
-
 INCLUDE=(
 	"static-site-deployer.php"
 	"src"
-	"vendor"
 	"readme.txt"
 	"README.md"
 	"LICENSE"
 	"CHANGELOG.md"
-	"composer.json"
 )
-
-echo "Installing production dependencies..."
-( cd "${ROOT_DIR}" && composer install --no-dev --optimize-autoloader --quiet )
 
 echo "Cleaning previous build..."
 rm -rf "${STAGE_DIR}" "${ZIP_PATH}"

@@ -34,4 +34,9 @@ to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Hardened export-directory detection and 404 asset renaming.
-- Corrected the composer PSR-4 namespace mapping.
+
+### Removed
+
+- The `symfony/mime` runtime dependency. `MimeHelper` uses its built-in type map
+  with a PHP `fileinfo` fallback, so the plugin is now dependency-free — no
+  composer or `vendor/` required.
