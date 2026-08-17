@@ -69,6 +69,12 @@ Exporting from Playground does not remove the token from the running site — it
 is simply omitted from the zip — so you only re-enter it when starting a new
 Playground from a committed archive.
 
+Exports run **synchronously** in Playground automatically: Simply Static's normal
+background queue relies on loopback HTTP requests, which Playground does not
+provide, so without this it would loop forever and never finish. On a normal host
+you can enable the same mode under **Settings → Synchronous export** if your host
+blocks loopback requests.
+
 ## Architecture
 
 | Concern | Class |

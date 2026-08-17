@@ -23,6 +23,7 @@ class Settings
         'script_name'  => '',
         'auto_publish' => true,
         'cleanup'      => true,
+        'sync_export'  => false,
     ];
 
     /** wp-config.php constant overrides, keyed by setting. */
@@ -114,6 +115,27 @@ class Settings
     }
 
     /**
+     * Whether the site is running inside WordPress Playground, which has no
+     * working PHP loopback for background processing.
+     */
+    public static function is_playground(): bool
+    {
+        if (is_dir('/internal/shared')) {
+            return true;
+        }
+        return defined('WP_HOME') && false !== strpos((string) constant('WP_HOME'), 'playground.wordpress.net');
+    }
+
+    /**
+     * Whether the Simply Static export should run synchronously (inline) rather
+     * than via background loopback requests. Always on in Playground.
+     */
+    public static function is_sync_export(): bool
+    {
+        return self::is_playground() || (bool) self::get('sync_export');
+    }
+
+    /**
      * Returns resolved Cloudflare credentials, or null when incomplete.
      *
      * @return array{account_id:string,api_token:string,script_name:string}|null
@@ -177,6 +199,7 @@ class Settings
             'script_name'  => $script_name,
             'auto_publish' => !empty($input['auto_publish']),
             'cleanup'      => !empty($input['cleanup']),
+            'sync_export'  => !empty($input['sync_export']),
         ];
     }
 
@@ -236,6 +259,21 @@ class Settings
                                 <input type="checkbox" name="<?php echo esc_attr(self::OPTION); ?>[cleanup]" value="1" <?php checked(!empty($all['cleanup'])); ?> />
                                 <?php esc_html_e('Delete the local export directory after a successful deploy to save disk space.', 'static-site-deployer'); ?>
                             </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Synchronous export', 'static-site-deployer'); ?></th>
+                        <td>
+                            <?php if (self::is_playground()) : ?>
+                                <label><input type="checkbox" checked disabled />
+                                    <?php esc_html_e('Automatically enabled in WordPress Playground.', 'static-site-deployer'); ?></label>
+                            <?php else : ?>
+                                <label>
+                                    <input type="checkbox" name="<?php echo esc_attr(self::OPTION); ?>[sync_export]" value="1" <?php checked(!empty($all['sync_export'])); ?> />
+                                    <?php esc_html_e('Run the export in a single request instead of background loopback requests.', 'static-site-deployer'); ?>
+                                </label>
+                            <?php endif; ?>
+                            <p class="description"><?php esc_html_e('Required for WordPress Playground and hosts without working loopback requests.', 'static-site-deployer'); ?></p>
                         </td>
                     </tr>
                 </table>

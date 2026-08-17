@@ -24,6 +24,13 @@ class Plugin
         Settings::register();
         Status::register_ajax();
 
+        // In WordPress Playground (and other loopback-less hosts) Simply Static's
+        // background queue never runs, causing an endless dispatch loop. Force
+        // its inline (synchronous) processing instead.
+        if (Settings::is_sync_export()) {
+            add_filter('wp_archive_creation_job_loopback_available', '__return_false');
+        }
+
         // Warn when auto-publish is on but credentials are missing (e.g. after
         // importing a Playground zip that excluded the token).
         add_action('admin_notices', [Settings::class, 'maybe_render_missing_creds_notice']);

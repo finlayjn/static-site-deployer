@@ -13,6 +13,9 @@ to [Semantic Versioning](https://semver.org/).
 - Deployment **status panel** on the settings page with a progress bar and the
   latest step message, polled over AJAX during a deploy.
 - Deployment **history** (last 20 results) shown on the settings page.
+- Synchronous export mode (auto-enabled in WordPress Playground) that forces
+  Simply Static's inline processing, fixing an endless background-dispatch loop
+  where the export never completed on hosts without working loopback requests.
 - Admin notice when auto-publish is on but Cloudflare credentials are missing;
   such saves skip the export instead of running one that cannot deploy (e.g.
   after importing a Playground archive without the token).
