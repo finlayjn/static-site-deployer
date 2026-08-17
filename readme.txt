@@ -46,11 +46,12 @@ precedence and is never stored in the database:
 
 = How do I keep my Cloudflare token out of a WordPress Playground export? =
 
-The plugin stores its settings in a single option (`ssd_settings`) and registers
-it with the WordPress to Playground exporter's `wp2p_excluded_option_names`
-filter, so the token is never written to the exported database. After importing a
-Playground archive, re-enter your credentials on the settings page (or provide
-them via wp-config constants that are not committed).
+The API token is stored in its own option (`ssd_api_token`) that the plugin
+registers with the WordPress to Playground exporter's `wp2p_excluded_option_names`
+filter, so the token is never written to the exported database. Your other
+settings (account ID, worker name, toggles) travel with the archive. After
+importing an archive, re-enter just the token on the settings page (or provide it
+via a wp-config constant that is not committed).
 
 = Nothing deploys on save. =
 

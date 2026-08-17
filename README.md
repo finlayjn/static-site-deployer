@@ -55,13 +55,19 @@ This plugin is designed to pair with
 import a Playground archive, edit the site, deploy changes to Cloudflare with
 this plugin, then export the archive again for backup or committing to GitHub.
 
-**Your Cloudflare token stays out of the exported archive.** Credentials are
-kept in a single option (`ssd_settings`), and the plugin registers that option
-with the exporter's `wp2p_excluded_option_names` filter, so it is never written
-to the exported SQLite database. After importing an archive into a fresh
-Playground, re-enter your credentials on the settings page (or provide them via
-uncommitted `wp-config.php` constants). This makes the exported zip safe to store
-in a public GitHub repository.
+**Your Cloudflare token stays out of the exported archive.** The API token is
+stored in its own option (`ssd_api_token`) that the plugin registers with the
+exporter's `wp2p_excluded_option_names` filter, so it is never written to the
+exported SQLite database. Your other settings — account ID, worker name, and the
+auto-publish/cleanup toggles — live in `ssd_settings` and **do** travel with the
+archive. After importing an archive into a fresh Playground, you only need to
+re-enter the **token** (or provide it via an uncommitted `wp-config.php`
+constant). This makes the exported zip safe to store in a public GitHub
+repository.
+
+Exporting from Playground does not remove the token from the running site — it
+is simply omitted from the zip — so you only re-enter it when starting a new
+Playground from a committed archive.
 
 ## Architecture
 
