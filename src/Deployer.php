@@ -10,7 +10,6 @@ use Throwable;
 class Deployer
 {
     const LOCK_KEY = 'ssd_deploy_lock';
-    const LAST_DEPLOY_OPTION = 'ssd_last_deploy';
 
     /**
      * Auto-publish handler for post changes. Debounced so a single edit does
@@ -61,15 +60,16 @@ class Deployer
     public static function run_export(): bool
     {
         if (!class_exists('\\Simply_Static\\Plugin')) {
-            self::log('Simply Static is not active; cannot export.');
+            Status::record_result('error', 'Simply Static is not active; cannot export.');
             return false;
         }
 
         try {
+            Status::set_progress(3, 'Exporting site…', 'running');
             \Simply_Static\Plugin::instance()->run_static_export();
             return true;
         } catch (Throwable $e) {
-            self::log('Error triggering export: ' . $e->getMessage());
+            Status::record_result('error', 'Error triggering export: ' . $e->getMessage());
             return false;
         }
     }
@@ -87,10 +87,11 @@ class Deployer
 
         $export_dir = self::find_export_dir();
         if (null === $export_dir) {
-            self::record('error', 'No completed export directory was found.');
+            Status::record_result('error', 'No completed export directory was found.');
             return;
         }
 
+        Status::set_progress(4, 'Processing export…', 'running');
         self::rename_404_asset($export_dir);
         self::deploy_to_cloudflare($export_dir);
     }
@@ -154,7 +155,7 @@ class Deployer
     {
         $credentials = Settings::credentials();
         if (null === $credentials) {
-            self::record('error', 'Cloudflare credentials are not configured.');
+            Status::record_result('error', 'Cloudflare credentials are not configured.');
             return;
         }
 
@@ -165,10 +166,13 @@ class Deployer
                 $export_dir,
                 $credentials['api_token']
             );
+            $deployer->setProgressCallback(static function ($percent, $message) {
+                Status::set_progress((int) $percent, (string) $message, 'running');
+            });
             $deployer->uploadAssets();
-            self::record('success', 'Deployed to Cloudflare.');
+            Status::record_result('success', 'Deployed to Cloudflare.');
         } catch (Throwable $e) {
-            self::record('error', 'Cloudflare deployment failed: ' . $e->getMessage());
+            Status::record_result('error', 'Cloudflare deployment failed: ' . $e->getMessage());
             return;
         }
 
@@ -199,22 +203,6 @@ class Deployer
                 @unlink($zip);
             }
         }
-    }
-
-    /**
-     * Records the outcome for display on the settings page and the log.
-     *
-     * @param string $status
-     * @param string $message
-     */
-    private static function record(string $status, string $message): void
-    {
-        update_option(
-            self::LAST_DEPLOY_OPTION,
-            ['status' => $status, 'message' => $message, 'time' => time()],
-            false
-        );
-        self::log($message);
     }
 
     private static function log(string $message): void

@@ -19,12 +19,31 @@ class CloudflareAssetsDeployer
     private string $distPath;
     private string $apiToken;
 
+    /** @var callable|null */
+    private $onProgress = null;
+
     public function __construct(string $accountId, string $scriptName, string $distPath, string $apiToken)
     {
         $this->accountId = $accountId;
         $this->scriptName = $scriptName;
         $this->distPath = rtrim($distPath, '/');
         $this->apiToken = $apiToken;
+    }
+
+    /**
+     * Sets a callback( int $percent, string $message ) invoked as the upload
+     * progresses.
+     */
+    public function setProgressCallback(callable $callback): void
+    {
+        $this->onProgress = $callback;
+    }
+
+    private function report(int $percent, string $message): void
+    {
+        if (null !== $this->onProgress) {
+            call_user_func($this->onProgress, $percent, $message);
+        }
     }
 
     /**
@@ -170,7 +189,10 @@ class CloudflareAssetsDeployer
      */
     public function uploadAssets(): void
     {
+        $this->report(5, 'Preparing files…');
         $manifest = $this->buildManifest();
+
+        $this->report(10, 'Starting upload…');
         $session  = $this->startUploadSession($manifest);
 
         $jwt = $session['result']['jwt'] ?? null;
@@ -179,18 +201,27 @@ class CloudflareAssetsDeployer
         // A missing JWT with no buckets means every asset is already uploaded.
         if (null === $jwt) {
             if (empty($buckets)) {
+                $this->report(95, 'Deploying…');
                 $this->deployAssets('');
+                $this->report(100, 'Deployed.');
                 return;
             }
             throw new \RuntimeException('No upload token returned from Cloudflare.');
         }
 
         $completionToken = $jwt;
+        $total = count($buckets);
+        $done  = 0;
         foreach ($buckets as $bucket) {
             $completionToken = $this->uploadFilesBatch($completionToken, $bucket, $manifest);
+            $done++;
+            $pct = $total > 0 ? (int) round(10 + ($done / $total) * 80) : 90;
+            $this->report($pct, 'Uploading files (' . $done . '/' . $total . ')…');
         }
 
+        $this->report(95, 'Deploying…');
         $this->deployAssets($completionToken);
+        $this->report(100, 'Deployed.');
     }
 
     /**

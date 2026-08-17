@@ -10,6 +10,9 @@ to [Semantic Versioning](https://semver.org/).
 - Settings page under **Settings → Static Site Deployer** for Cloudflare
   credentials, with wp-config constant overrides that take precedence.
 - Manual **Publish now** mode as an alternative to auto-publishing on save.
+- Deployment **status panel** on the settings page with a progress bar and the
+  latest step message, polled over AJAX during a deploy.
+- Deployment **history** (last 20 results) shown on the settings page.
 - Admin notice when auto-publish is on but Cloudflare credentials are missing;
   such saves skip the export instead of running one that cannot deploy (e.g.
   after importing a Playground archive without the token).

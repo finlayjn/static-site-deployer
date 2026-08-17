@@ -22,6 +22,7 @@ class Plugin
     public function init(): void
     {
         Settings::register();
+        Status::register_ajax();
 
         // Warn when auto-publish is on but credentials are missing (e.g. after
         // importing a Playground zip that excluded the token).

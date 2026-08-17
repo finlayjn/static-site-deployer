@@ -187,7 +187,7 @@ class Settings
         }
 
         $all           = self::all();
-        $last          = get_option('ssd_last_deploy', []);
+
         $has_creds     = null !== self::credentials();
         $simply_static = class_exists('\\Simply_Static\\Plugin');
         ?>
@@ -198,24 +198,6 @@ class Settings
                 <div class="notice notice-error"><p>
                     <?php esc_html_e('Simply Static is not active. Install and activate the free Simply Static plugin to enable exports.', 'static-site-deployer'); ?>
                 </p></div>
-            <?php endif; ?>
-
-            <?php if (is_array($last) && !empty($last['time'])) : ?>
-                <div class="notice notice-<?php echo esc_attr('success' === ($last['status'] ?? '') ? 'success' : 'warning'); ?>">
-                    <p>
-                        <?php
-                        printf(
-                            /* translators: 1: status, 2: human time diff */
-                            esc_html__('Last deploy: %1$s (%2$s ago).', 'static-site-deployer'),
-                            esc_html($last['status'] ?? 'unknown'),
-                            esc_html(human_time_diff((int) $last['time']))
-                        );
-                        if (!empty($last['message'])) {
-                            echo '<br><code>' . esc_html($last['message']) . '</code>';
-                        }
-                        ?>
-                    </p>
-                </div>
             <?php endif; ?>
 
             <form method="post" action="options.php">
@@ -279,6 +261,74 @@ class Settings
                     <p class="description"><?php esc_html_e('Enter your Cloudflare credentials above first.', 'static-site-deployer'); ?></p>
                 <?php endif; ?>
             </form>
+
+            <hr />
+            <h2><?php esc_html_e('Deployment status', 'static-site-deployer'); ?></h2>
+            <?php $progress = Status::get_progress(); ?>
+            <div id="ssd-status" data-nonce="<?php echo esc_attr(wp_create_nonce(Status::AJAX_ACTION)); ?>">
+                <p><strong><?php esc_html_e('State:', 'static-site-deployer'); ?></strong>
+                    <span id="ssd-status-state"><?php echo esc_html($progress['state']); ?></span></p>
+                <div style="background:#e0e0e0;height:16px;border-radius:4px;overflow:hidden;max-width:420px;">
+                    <div id="ssd-status-bar" style="height:100%;width:<?php echo (int) $progress['percent']; ?>%;background:#2271b1;transition:width .3s ease;"></div>
+                </div>
+                <p id="ssd-status-message"><?php echo esc_html('' !== $progress['message'] ? $progress['message'] : '—'); ?></p>
+            </div>
+
+            <h2><?php esc_html_e('History', 'static-site-deployer'); ?></h2>
+            <?php $history = Status::get_history(); ?>
+            <?php if (empty($history)) : ?>
+                <p><?php esc_html_e('No deployments yet.', 'static-site-deployer'); ?></p>
+            <?php else : ?>
+                <table class="widefat striped" style="max-width:720px;">
+                    <thead>
+                        <tr>
+                            <th><?php esc_html_e('When', 'static-site-deployer'); ?></th>
+                            <th><?php esc_html_e('Status', 'static-site-deployer'); ?></th>
+                            <th><?php esc_html_e('Message', 'static-site-deployer'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($history as $entry) : ?>
+                            <tr>
+                                <td><?php echo esc_html(human_time_diff((int) ($entry['time'] ?? 0)) . ' ' . __('ago', 'static-site-deployer')); ?></td>
+                                <td><?php echo esc_html($entry['status'] ?? ''); ?></td>
+                                <td><?php echo esc_html($entry['message'] ?? ''); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+
+            <script>
+            (function () {
+                var el = document.getElementById('ssd-status');
+                if (!el) { return; }
+                var nonce = el.getAttribute('data-nonce');
+                var ajaxUrl = <?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>;
+                var action = <?php echo wp_json_encode(Status::AJAX_ACTION); ?>;
+                function colorFor(state) {
+                    if (state === 'error') { return '#d63638'; }
+                    if (state === 'success') { return '#00a32a'; }
+                    return '#2271b1';
+                }
+                function poll() {
+                    fetch(ajaxUrl + '?action=' + encodeURIComponent(action) + '&nonce=' + encodeURIComponent(nonce), { credentials: 'same-origin' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (!res || !res.success) { return; }
+                            var p = res.data || {};
+                            document.getElementById('ssd-status-state').textContent = p.state || 'idle';
+                            var bar = document.getElementById('ssd-status-bar');
+                            bar.style.width = (p.percent || 0) + '%';
+                            bar.style.background = colorFor(p.state);
+                            document.getElementById('ssd-status-message').textContent = p.message || '—';
+                            if (p.state === 'running') { setTimeout(poll, 2500); }
+                        })
+                        .catch(function () {});
+                }
+                poll();
+            })();
+            </script>
         </div>
         <?php
     }
