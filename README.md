@@ -1,42 +1,92 @@
 # Static Site Deployer
 
-This simple WordPress plugin triggers a Simply Static export upon creating, updating, or deleting a post and deploys the result to a static assets host.
+This WordPress plugin runs a [Simply Static](https://wordpress.org/plugins/simply-static/)
+export — automatically when you edit content, or on demand — and deploys the
+result to a Cloudflare Worker's static assets. It gives you free, serverless
+static hosting for a WordPress site you edit locally (for example in Local WP or
+[WordPress Playground](https://wordpress.github.io/wordpress-playground/)).
 
 > [!NOTE]
-> This functionality is already provided by Simply Static Pro and is implemented much better than this plugin. I strongly suggest upgrading if you can afford it.
+> This functionality is also provided by Simply Static Pro, which is more
+> polished. Please support them if you can.
 
 ## Features & To-Do
--   [x] Automatic deployment on create/update/delete post
--   [x] Automatic deployment after Simply Static generate
--   [x] Deploy to Cloudflare Workers
--   [x] Configure via wp-config.php
--   [ ] Configure via settings page
--   [ ] Deploy to GitHub
 
-## Installation & Usage
+- [x] Automatic deployment on create/update/delete post
+- [x] Automatic deployment after a Simply Static export
+- [x] Deploy to Cloudflare Workers static assets
+- [x] Configure via wp-config.php constants
+- [x] Configure via a settings page
+- [x] Manual "Publish now" mode
+- [x] Clean up the export directory after a successful deploy
+- [ ] Deploy to GitHub Pages
 
-### Prepare
+## Installation
 
-1. Install the free version of Simply Static. The default configuration is sufficient, but you should be able to configure it as desired without causing issues with deployment.
-2. Download the repository zip from GitHub, then install and activate it on your WordPress installation.
-3. Create an API key with permissions for Cloudflare Workers.
-4. Create a Cloudflare Worker with the Hello World template.
+1. Install and activate the free Simply Static plugin.
+2. Install and activate this plugin (download a release zip, or build one — see below).
+3. Create a Cloudflare API token with the **Workers Scripts: Edit** permission.
+4. Create a Cloudflare Worker (the Hello World template is fine).
+5. Go to **Settings → Static Site Deployer** and enter your Account ID, Worker
+   name, and API token.
 
-### Define Variables
+### Configuring credentials
 
-Add the following to your wp-config.php file, replacing the values as necessary.
+Enter credentials on the settings page, or define them in `wp-config.php`
+(these always win and are never stored in the database):
 
 ```php
-define('SSD_CLOUDFLARE_ACCOUNT_ID', 'your_account_id');
-define('SSD_CLOUDFLARE_API_TOKEN', 'your_api_token');
-define('SSD_CLOUDFLARE_SCRIPT_NAME', 'your_worker_name');
+define( 'SSD_CLOUDFLARE_ACCOUNT_ID', 'your_account_id' );
+define( 'SSD_CLOUDFLARE_API_TOKEN', 'your_api_token' );
+define( 'SSD_CLOUDFLARE_SCRIPT_NAME', 'your_worker_name' );
 ```
 
-### Edit Your Site
-Any time you create, update, or delete a post, wait a minute or two and you should see the changes reflected on your worker.
+## Usage
+
+- **Auto-publish** (default): create, update, or delete a post and the site is
+  exported and deployed automatically after a short debounce.
+- **Manual**: turn off auto-publish and use the **Publish now** button on the
+  settings page.
+
+## Using with WordPress Playground
+
+This plugin is designed to pair with
+[WordPress to Playground](https://github.com/finlayjn/wordpress-to-playground):
+import a Playground archive, edit the site, deploy changes to Cloudflare with
+this plugin, then export the archive again for backup or committing to GitHub.
+
+**Your Cloudflare token stays out of the exported archive.** Credentials are
+kept in a single option (`ssd_settings`), and the plugin registers that option
+with the exporter's `wp2p_excluded_option_names` filter, so it is never written
+to the exported SQLite database. After importing an archive into a fresh
+Playground, re-enter your credentials on the settings page (or provide them via
+uncommitted `wp-config.php` constants). This makes the exported zip safe to store
+in a public GitHub repository.
+
+## Architecture
+
+| Concern | Class |
+| --- | --- |
+| Bootstrap / hooks | `SSD\Plugin` |
+| Settings + credential resolution | `SSD\Settings` |
+| Export trigger, deploy, cleanup | `SSD\Deployer` |
+| Cloudflare assets upload/deploy | `SSD\CloudflareAssetsDeployer` |
+| MIME type resolution | `SSD\MimeHelper` |
+| Recursive folder deletion | `SSD\FolderHelper` |
+
+## Development
+
+```bash
+composer install       # dev dependencies (WordPress core stubs, Simply Static)
+tests/run.sh           # lint + unit tests (no WordPress required)
+bin/build.sh           # produce dist/static-site-deployer.zip with vendor bundled
+```
 
 ## Motivation
-Static site hosting is a great way to reduce hosting costs when your website content isn't interactive. While the creators of Simply Static have done great work and deserve support, the yearly fee completely defeats the purpose of static hosting for my use case. With this plugin, you can edit your WordPress site locally with a tool like Local WP and automatically deploy it to the internet completely for free.
+
+Static hosting is a great way to cut costs when your content isn't interactive.
+This plugin lets you edit WordPress locally and deploy to Cloudflare for free.
 
 ## License
-This software is licensed under the GPLv2.
+
+GPL-2.0-or-later.

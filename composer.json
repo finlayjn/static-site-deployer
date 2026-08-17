@@ -1,9 +1,12 @@
 {
     "name": "finlayjn/static-site-deployer",
-    "version": "0.0.1",
+    "description": "Triggers a Simply Static export on save (or on demand) and deploys the result to Cloudflare Workers static assets.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "version": "0.1.0",
     "autoload": {
         "psr-4": {
-            "Finlayjn\\StaticSiteDeployer\\": "src/"
+            "SSD\\": "src/"
         }
     },
     "authors": [
@@ -12,11 +15,12 @@
             "email": "52335224+finlayjn@users.noreply.github.com"
         }
     ],
+    "require": {
+        "php": ">=7.4",
+        "symfony/mime": "^7.3"
+    },
     "require-dev": {
         "johnpbloch/wordpress-core": "^6.8",
         "simplystatic/simply-static": "^3.3"
-    },
-    "require": {
-        "symfony/mime": "^7.3"
     }
 }

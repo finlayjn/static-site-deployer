@@ -1,18 +1,50 @@
 <?php
 /**
- * Plugin Name: Static Site Deployer
- * Description: Triggers Simply Static export on post save and deploys the result to a static assets host.
- * Version: 0.0.1
- * Author: Finlay Nathan
+ * Plugin Name:       Static Site Deployer
+ * Plugin URI:        https://github.com/finlayjn/static-site-deployer
+ * Description:       Triggers a Simply Static export (on save or on demand) and deploys the result to Cloudflare Workers static assets.
+ * Version:           0.1.0
+ * Requires at least: 5.9
+ * Requires PHP:      7.4
+ * Author:            Finlay Nathan
+ * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       static-site-deployer
+ *
+ * @package StaticSiteDeployer
  */
 
-require_once plugin_dir_path(__FILE__) . 'vendor/autoload.php';
+defined( 'ABSPATH' ) || exit;
 
-foreach (glob(plugin_dir_path(__FILE__) . 'src/*.php') as $file) {
-    require_once $file;
+define( 'SSD_VERSION', '0.1.0' );
+define( 'SSD_PLUGIN_FILE', __FILE__ );
+define( 'SSD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+define( 'SSD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+// Composer dependencies (symfony/mime). Bundled in release builds.
+$ssd_autoload = SSD_PLUGIN_DIR . 'vendor/autoload.php';
+if ( is_readable( $ssd_autoload ) ) {
+	require_once $ssd_autoload;
 }
 
-add_action('save_post', ['SSD\Deployer', 'maybe_run'], 20, 3);
-add_action('wp_insert_post', ['SSD\Deployer', 'maybe_run'], 20, 3);
-add_action('delete_post', ['SSD\Deployer', 'maybe_run'], 20);
-add_action('ss_completed', ['SSD\Deployer', 'on_export_completed']);
+// Lightweight autoloader for the plugin's own SSD\* classes, so the plugin
+// works even when composer's autoloader has not been regenerated.
+spl_autoload_register(
+	function ( $class ) {
+		if ( 0 !== strpos( $class, 'SSD\\' ) ) {
+			return;
+		}
+		$relative = str_replace( '\\', '/', substr( $class, strlen( 'SSD\\' ) ) );
+		$file     = SSD_PLUGIN_DIR . 'src/' . $relative . '.php';
+		if ( is_readable( $file ) ) {
+			require_once $file;
+		}
+	}
+);
+
+add_action(
+	'plugins_loaded',
+	static function () {
+		\SSD\Plugin::instance()->init();
+	}
+);

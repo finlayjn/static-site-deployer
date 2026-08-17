@@ -2,83 +2,225 @@
 
 namespace SSD;
 
-use Exception;
+use Throwable;
 
+/**
+ * Triggers Simply Static exports and deploys the result to Cloudflare.
+ */
 class Deployer
 {
-    private static $lock_key = 'ssd_deploy_lock';
+    const LOCK_KEY = 'ssd_deploy_lock';
+    const LAST_DEPLOY_OPTION = 'ssd_last_deploy';
 
-    public static function maybe_run($post_ID)
+    /**
+     * Auto-publish handler for post changes. Debounced so a single edit does
+     * not trigger multiple overlapping exports.
+     *
+     * @param int $post_ID
+     */
+    public static function maybe_run($post_ID): void
     {
-        if (wp_is_post_autosave($post_ID) || wp_is_post_revision($post_ID)) return;
-        if (get_transient(self::$lock_key)) return;
-        set_transient(self::$lock_key, true, 60);
+        if (wp_is_post_autosave($post_ID) || wp_is_post_revision($post_ID)) {
+            return;
+        }
+        // This handler is only hooked when auto-publish is on. Without
+        // credentials there is nothing to deploy to, so skip the export and let
+        // the admin notice explain why (e.g. after importing a Playground zip).
+        if (null === Settings::credentials()) {
+            return;
+        }
+        if (get_transient(self::LOCK_KEY)) {
+            return;
+        }
+        set_transient(self::LOCK_KEY, true, 60);
+
+        self::run_export();
+    }
+
+    /**
+     * Handles the "Publish now" button.
+     */
+    public static function handle_publish_now(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('You do not have permission to publish.', 'static-site-deployer'));
+        }
+        check_admin_referer(Settings::PUBLISH_ACTION);
+
+        self::run_export();
+
+        wp_safe_redirect(admin_url('options-general.php?page=' . Settings::MENU_SLUG));
+        exit;
+    }
+
+    /**
+     * Starts a Simply Static export.
+     *
+     * @return bool True when the export was triggered.
+     */
+    public static function run_export(): bool
+    {
+        if (!class_exists('\\Simply_Static\\Plugin')) {
+            self::log('Simply Static is not active; cannot export.');
+            return false;
+        }
 
         try {
             \Simply_Static\Plugin::instance()->run_static_export();
-        } catch (\Throwable $e) {
-            error_log("Error triggering export: " . $e->getMessage());
+            return true;
+        } catch (Throwable $e) {
+            self::log('Error triggering export: ' . $e->getMessage());
+            return false;
         }
     }
 
-    private static function rename_404_asset($export_dir)
+    /**
+     * Runs when Simply Static finishes. Deploys on success.
+     *
+     * @param string $status
+     */
+    public static function on_export_completed($status): void
     {
-        $src = "$export_dir/404/index.html";
-        $dest = "$export_dir/404.html";
-        if (file_exists($src)) {
-            rename($src, $dest);
-            \SSD\FolderHelper::delete_folder("$export_dir/404");
-        }
-    }
-
-    public static function on_export_completed($status)
-    {
-        if ($status !== 'success') return;
-
-        $temp_dir = \Simply_Static\Util::get_temp_dir();
-        // Find the only subdirectory (the unzipped export)
-        $dirs = array_filter(glob(rtrim($temp_dir, '/') . '/*'), 'is_dir');
-        if (empty($dirs)) {
-            error_log("No export directory found in temp_dir.");
+        if ('success' !== $status) {
             return;
         }
-        // Use the most recent directory
-        usort($dirs, fn($a, $b) => filemtime($b) - filemtime($a));
-        $export_dir = $dirs[0];
 
-        // Rename 404 asset in place
+        $export_dir = self::find_export_dir();
+        if (null === $export_dir) {
+            self::record('error', 'No completed export directory was found.');
+            return;
+        }
+
         self::rename_404_asset($export_dir);
-
-        // Deploy to Cloudflare directly from export_dir
         self::deploy_to_cloudflare($export_dir);
     }
 
-    private static function deploy_to_cloudflare(string $export_dir): void
+    /**
+     * Locates the most recent Simply Static export directory.
+     *
+     * @return string|null
+     */
+    private static function find_export_dir(): ?string
     {
-        $required = [
-            'SSD_CLOUDFLARE_ACCOUNT_ID',
-            'SSD_CLOUDFLARE_API_TOKEN',
-            'SSD_CLOUDFLARE_SCRIPT_NAME',
-        ];
+        if (!class_exists('\\Simply_Static\\Util')) {
+            return null;
+        }
 
-        foreach ($required as $key) {
-            if (!defined($key) || !constant($key)) {
-                error_log("Required constant $key is not defined or empty.");
-                return;
+        $temp_dir = \Simply_Static\Util::get_temp_dir();
+        if (!is_string($temp_dir) || '' === $temp_dir) {
+            return null;
+        }
+
+        $dirs = array_filter((array) glob(rtrim($temp_dir, '/') . '/*'), 'is_dir');
+        if (empty($dirs)) {
+            return null;
+        }
+
+        // Most recent first.
+        usort($dirs, static fn($a, $b) => filemtime($b) <=> filemtime($a));
+
+        // Prefer a directory that looks like a rendered site.
+        foreach ($dirs as $dir) {
+            if (file_exists($dir . '/index.html') || file_exists($dir . '/404/index.html')) {
+                return $dir;
             }
         }
 
+        return $dirs[0];
+    }
+
+    /**
+     * Moves 404/index.html to 404.html for Cloudflare's not_found handling.
+     *
+     * @param string $export_dir
+     */
+    private static function rename_404_asset(string $export_dir): void
+    {
+        $src  = $export_dir . '/404/index.html';
+        $dest = $export_dir . '/404.html';
+        if (file_exists($src)) {
+            if (@rename($src, $dest)) {
+                FolderHelper::delete_folder($export_dir . '/404');
+            }
+        }
+    }
+
+    /**
+     * Deploys an export directory to Cloudflare and records the outcome.
+     *
+     * @param string $export_dir
+     */
+    private static function deploy_to_cloudflare(string $export_dir): void
+    {
+        $credentials = Settings::credentials();
+        if (null === $credentials) {
+            self::record('error', 'Cloudflare credentials are not configured.');
+            return;
+        }
+
         try {
-            $uploader = new \SSD\CloudflareAssetsDeployer(
-                constant('SSD_CLOUDFLARE_ACCOUNT_ID'),
-                constant('SSD_CLOUDFLARE_SCRIPT_NAME'),
+            $deployer = new CloudflareAssetsDeployer(
+                $credentials['account_id'],
+                $credentials['script_name'],
                 $export_dir,
-                constant('SSD_CLOUDFLARE_API_TOKEN')
+                $credentials['api_token']
             );
-            $uploader->uploadAssets();
-            error_log('Cloudflare deployment succeeded.');
-        } catch (Exception $e) {
-            error_log('Cloudflare deployment failed: ' . $e->getMessage());
+            $deployer->uploadAssets();
+            self::record('success', 'Deployed to Cloudflare.');
+        } catch (Throwable $e) {
+            self::record('error', 'Cloudflare deployment failed: ' . $e->getMessage());
+            return;
+        }
+
+        if (Settings::is_cleanup_enabled()) {
+            self::cleanup($export_dir);
+        }
+    }
+
+    /**
+     * Removes the deployed export directory and any leftover Simply Static
+     * export zips in the temp directory.
+     *
+     * @param string $export_dir
+     */
+    private static function cleanup(string $export_dir): void
+    {
+        FolderHelper::delete_folder($export_dir);
+
+        if (!class_exists('\\Simply_Static\\Util')) {
+            return;
+        }
+        $temp_dir = \Simply_Static\Util::get_temp_dir();
+        if (!is_string($temp_dir) || '' === $temp_dir) {
+            return;
+        }
+        foreach ((array) glob(rtrim($temp_dir, '/') . '/*.zip') as $zip) {
+            if (is_file($zip)) {
+                @unlink($zip);
+            }
+        }
+    }
+
+    /**
+     * Records the outcome for display on the settings page and the log.
+     *
+     * @param string $status
+     * @param string $message
+     */
+    private static function record(string $status, string $message): void
+    {
+        update_option(
+            self::LAST_DEPLOY_OPTION,
+            ['status' => $status, 'message' => $message, 'time' => time()],
+            false
+        );
+        self::log($message);
+    }
+
+    private static function log(string $message): void
+    {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[Static Site Deployer] ' . $message);
         }
     }
 }
