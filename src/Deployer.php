@@ -53,7 +53,7 @@ class Deployer
         // save. Queue a pending deploy for the admin's browser to pick up (in
         // the editor via wp.data, or on the next admin page load). Only the
         // non-secret config is required; the token may be entered at publish.
-        if (!Settings::has_browser_deploy_config()) {
+        if (!Settings::has_crawler_deploy_config()) {
             return;
         }
         if (get_transient(self::LOCK_KEY)) {
@@ -119,17 +119,23 @@ class Deployer
      * Deploys a rendered static site directory to Cloudflare and records the
      * outcome. Export sources call this when their output is ready.
      *
-     * @param string $export_dir
+     * @param string     $export_dir
+     * @param array{account_id:string,api_token:string,script_name:string}|null $credentials
+     *        Explicit credentials (e.g. a one-time token from the crawler);
+     *        falls back to the stored/constant credentials when null.
+     * @return bool Whether the deploy succeeded.
      */
-    public static function deploy_directory(string $export_dir): void
+    public static function deploy_directory(string $export_dir, ?array $credentials = null): bool
     {
         Status::set_progress(4, 'Processing export…', 'running');
         self::rename_404_asset($export_dir);
 
-        $credentials = Settings::credentials();
+        if (null === $credentials) {
+            $credentials = Settings::credentials();
+        }
         if (null === $credentials) {
             Status::record_result('error', 'Cloudflare credentials are not configured.');
-            return;
+            return false;
         }
 
         try {
@@ -146,12 +152,14 @@ class Deployer
             Status::record_result('success', 'Deployed to Cloudflare.');
         } catch (Throwable $e) {
             Status::record_result('error', 'Cloudflare deployment failed: ' . $e->getMessage());
-            return;
+            return false;
         }
 
         if (Settings::is_cleanup_enabled()) {
             FolderHelper::delete_folder($export_dir);
         }
+
+        return true;
     }
 
     /**

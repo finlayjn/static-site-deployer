@@ -2,6 +2,8 @@
 
 namespace SSD\Sources;
 
+use SSD\Deployer;
+use SSD\FolderHelper;
 use SSD\Settings;
 use SSD\Status;
 
@@ -17,6 +19,7 @@ class Crawler_Source implements Export_Source
 {
     const SEEDS_ACTION  = 'ssd_crawler_seeds';
     const RECORD_ACTION = 'ssd_crawler_record';
+    const DEPLOY_ACTION = 'ssd_crawler_deploy';
     const NONCE         = 'ssd_crawler';
     const SCRIPT_HANDLE = 'ssd-crawler';
 
@@ -72,6 +75,7 @@ class Crawler_Source implements Export_Source
     {
         add_action('wp_ajax_' . self::SEEDS_ACTION, [$this, 'ajax_seeds']);
         add_action('wp_ajax_' . self::RECORD_ACTION, [$this, 'ajax_record']);
+        add_action('wp_ajax_' . self::DEPLOY_ACTION, [$this, 'ajax_deploy']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue']);
     }
 
@@ -136,16 +140,21 @@ class Crawler_Source implements Export_Source
                 'ajaxUrl'      => admin_url('admin-ajax.php'),
                 'seedsAction'  => self::SEEDS_ACTION,
                 'recordAction' => self::RECORD_ACTION,
+                'deployAction' => self::DEPLOY_ACTION,
                 'statusAction' => Status::AJAX_ACTION,
                 'statusNonce'  => wp_create_nonce(Status::AJAX_ACTION),
                 'nonce'        => wp_create_nonce(self::NONCE),
                 'baseUrl'      => home_url('/'),
-                'canDeploy'    => Settings::has_browser_deploy_config(),
+                'canDeploy'    => Settings::has_crawler_deploy_config(),
                 'hasToken'     => '' !== $token,
                 'accountId'    => (string) Settings::get('account_id'),
                 'scriptName'   => (string) Settings::get('script_name'),
                 'token'        => $token,
                 'relayUrl'     => (string) Settings::get('relay_url'),
+                // Playground can't reach the Cloudflare API from PHP, so it
+                // deploys from the browser via the relay Worker. A normal
+                // install deploys server-side through its own backend.
+                'deployMode'   => Settings::is_playground() ? 'relay' : 'server',
                 'pending'      => (bool) get_transient(self::PENDING_KEY),
             ]
         );
@@ -236,5 +245,120 @@ class Crawler_Source implements Export_Source
 
         Status::record_result($status, $message);
         wp_send_json_success();
+    }
+
+    /**
+     * Deploys a crawl that was rendered in the browser through the site's own
+     * PHP backend. Used on normal installs, where PHP can reach the Cloudflare
+     * API directly, so no relay Worker (and no token in the browser) is needed.
+     * The crawler POSTs its rendered files as a ZIP; PHP unpacks them and hands
+     * the directory to the same server-side deployer Simply Static uses.
+     */
+    public function ajax_deploy(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('forbidden', 403);
+        }
+        check_ajax_referer(self::NONCE, 'nonce');
+
+        if (Settings::is_playground()) {
+            wp_send_json_error('Server-side deploy is unavailable in WordPress Playground; use the relay.', 400);
+        }
+
+        if (
+            empty($_FILES['zip']['tmp_name'])
+            || !is_uploaded_file($_FILES['zip']['tmp_name'])
+        ) {
+            wp_send_json_error('No export archive was received.', 400);
+        }
+
+        // Prefer stored/constant credentials; otherwise accept a one-time token
+        // entered at publish and used only for this deploy (never stored).
+        $credentials = Settings::credentials();
+        if (null === $credentials) {
+            $account_id  = trim((string) Settings::get('account_id'));
+            $script_name = trim((string) Settings::get('script_name'));
+            $token       = isset($_POST['token']) ? trim((string) wp_unslash($_POST['token'])) : '';
+            if ('' === $account_id || '' === $script_name || '' === $token) {
+                wp_send_json_error('Cloudflare credentials are not configured.', 400);
+            }
+            $credentials = [
+                'account_id'  => $account_id,
+                'script_name' => $script_name,
+                'api_token'   => $token,
+            ];
+        }
+
+        $dir = self::unpack_archive((string) $_FILES['zip']['tmp_name']);
+        if (is_wp_error($dir)) {
+            wp_send_json_error($dir->get_error_message(), 400);
+        }
+
+        // A browser deploy is running; clear any queued pending deploy so it
+        // isn't retried on the next admin page load.
+        delete_transient(self::PENDING_KEY);
+
+        $ok = Deployer::deploy_directory($dir, $credentials);
+        FolderHelper::delete_folder($dir);
+
+        wp_send_json_success([
+            'ok'      => $ok,
+            'result'  => Status::get_progress(),
+            'history' => Status::get_history_formatted(),
+        ]);
+    }
+
+    /**
+     * Extracts an uploaded crawl ZIP into a fresh temporary directory, guarding
+     * against path traversal (zip slip). Returns the directory path.
+     *
+     * @param string $zip_path Path to the uploaded ZIP file.
+     * @return string|\WP_Error
+     */
+    private static function unpack_archive(string $zip_path)
+    {
+        if (!class_exists('ZipArchive')) {
+            return new \WP_Error('ssd_no_zip', 'The ZipArchive PHP extension is required to deploy from this server.');
+        }
+
+        $zip = new \ZipArchive();
+        if (true !== $zip->open($zip_path)) {
+            return new \WP_Error('ssd_bad_zip', 'The export archive could not be opened.');
+        }
+
+        $dir = trailingslashit(get_temp_dir()) . 'ssd-crawler-' . wp_generate_password(12, false);
+        if (!wp_mkdir_p($dir)) {
+            $zip->close();
+            return new \WP_Error('ssd_no_tmp', 'A temporary directory for the export could not be created.');
+        }
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = (string) $zip->getNameIndex($i);
+            if ('' === $name || '/' === substr($name, -1)) {
+                continue;
+            }
+            // Reject absolute paths and traversal segments.
+            if ('/' === $name[0] || false !== strpos($name, '..') || false !== strpos($name, "\0")) {
+                $zip->close();
+                FolderHelper::delete_folder($dir);
+                return new \WP_Error('ssd_unsafe_zip', 'The export archive contained an unsafe path.');
+            }
+            $target = $dir . '/' . $name;
+            $parent = dirname($target);
+            if (!is_dir($parent) && !wp_mkdir_p($parent)) {
+                continue;
+            }
+            $stream = $zip->getStream($name);
+            if (false === $stream) {
+                continue;
+            }
+            file_put_contents($target, $stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+        $zip->close();
+
+        return $dir;
     }
 }

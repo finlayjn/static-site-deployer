@@ -126,13 +126,21 @@ function main() {
 
 	const publish = guard(async () => {
 		if (!cfg.canDeploy) {
-			report('error', null, 'Add your Cloudflare account ID, worker name, and relay URL in settings to deploy.');
+			report('error', null, deployConfigHint());
 			return;
 		}
-		const token = getToken();
-		if (!token) {
-			report('error', null, 'A Cloudflare API token is required to deploy.');
-			return;
+
+		// On a normal install the deploy runs through the site's own backend,
+		// which uses the stored/constant token — the browser only needs a token
+		// when nothing is stored server-side (or when deploying via the relay).
+		const serverMode = cfg.deployMode === 'server';
+		let token = '';
+		if (!serverMode || !cfg.hasToken) {
+			token = getToken();
+			if (!token) {
+				report('error', null, 'A Cloudflare API token is required to deploy.');
+				return;
+			}
 		}
 
 		// In the block editor, block further saves and show a notice until the
@@ -142,27 +150,36 @@ function main() {
 		try {
 			// Crawl fills the first half of the bar, deploy the second half.
 			const result = await crawl((frac) => Math.round(frac * 50));
-			await deployToCloudflare({
-				fetch: (url, init) => window.fetch(url, init),
-				accountId: cfg.accountId,
-				scriptName: cfg.scriptName,
-				token,
-				relayUrl: cfg.relayUrl,
-				files: result.files,
-				onProgress: (percent, message) =>
-					report('running', 50 + Math.round(percent / 2), message),
-			});
+			if (serverMode) {
+				report('running', 55, 'Uploading to your server…');
+				await deployViaServer(buildZip(result), token);
+				// The backend already recorded the result; just refresh the table.
+				await refreshHistory();
+			} else {
+				await deployToCloudflare({
+					fetch: (url, init) => window.fetch(url, init),
+					accountId: cfg.accountId,
+					scriptName: cfg.scriptName,
+					token,
+					relayUrl: cfg.relayUrl,
+					files: result.files,
+					onProgress: (percent, message) =>
+						report('running', 50 + Math.round(percent / 2), message),
+				});
+				await record('success', `Deployed ${result.files.size} files to Cloudflare.`);
+			}
 			report(
 				'success',
 				100,
 				`Deployed to Cloudflare — ${result.pages} pages, ${result.assets} assets, ${result.errors.length} crawl errors.`
 			);
-			await record('success', `Deployed ${result.files.size} files to Cloudflare.`);
 			editorNotice('success', 'Deployed to Cloudflare.');
 		} catch (e) {
 			const msg = e && e.message ? e.message : String(e);
 			report('error', null, 'Deploy failed: ' + msg);
-			await record('error', 'Deploy failed: ' + msg);
+			if (!serverMode) {
+				await record('error', 'Deploy failed: ' + msg);
+			}
 			editorNotice('error', 'Deploy failed: ' + msg);
 		} finally {
 			if (lock) {
@@ -344,6 +361,48 @@ async function record(status, message) {
 		body,
 	});
 	await refreshHistory();
+}
+
+/**
+ * Deploys a crawl through the site's own backend (normal installs). The backend
+ * unpacks the ZIP and uploads to Cloudflare server-side, so no relay or
+ * in-browser token is required. Throws with the server's message on failure.
+ *
+ * @param {Uint8Array} zipBytes
+ * @param {string} token One-time token, sent only when nothing is stored server-side.
+ */
+async function deployViaServer(zipBytes, token) {
+	const form = new FormData();
+	form.append('action', cfg.deployAction);
+	form.append('nonce', cfg.nonce);
+	if (token) {
+		form.append('token', token);
+	}
+	form.append('zip', new Blob([zipBytes], { type: 'application/zip' }), 'ssd-crawler-export.zip');
+
+	const res = await window.fetch(cfg.ajaxUrl, {
+		method: 'POST',
+		credentials: 'same-origin',
+		body: form,
+	});
+	const json = await res.json().catch(() => null);
+	if (!res.ok || !json || !json.success) {
+		const data = json && json.data;
+		const msg = typeof data === 'string' ? data : (data && data.message) || 'Deploy failed.';
+		throw new Error(msg);
+	}
+	const data = json.data || {};
+	if (data.ok === false) {
+		throw new Error((data.result && data.result.message) || 'Deploy failed.');
+	}
+	return data;
+}
+
+/** Config-missing hint, tailored to whether a relay is needed (Playground only). */
+function deployConfigHint() {
+	return cfg.deployMode === 'relay'
+		? 'Add your Cloudflare account ID, worker name, and relay URL in settings to deploy.'
+		: 'Add your Cloudflare account ID and worker name in settings to deploy.';
 }
 
 /** Rebuilds the settings-page History table from the server, without a reload. */

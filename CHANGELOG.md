@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-08-18
+
+### Added
+
+- **The built-in crawler now deploys through the site's own backend on normal
+  WordPress installs** — the same server-side path Simply Static uses. The
+  browser renders the site and POSTs it to the plugin, which uploads to
+  Cloudflare from PHP. This removes the need for the relay Worker on real
+  installs and keeps the API token server-side (stored token or the
+  `SSD_CLOUDFLARE_API_TOKEN` constant); a one-time token entered at publish is
+  used for that deploy only. The relay Worker is now only required inside
+  WordPress Playground, where PHP cannot reach the Cloudflare API.
+
+### Changed
+
+- The **Cloudflare API relay URL** setting is only needed for the crawler inside
+  Playground; on a normal install it can be left blank.
+
 ## [0.4.0] - 2026-08-18
 
 ### Fixed

@@ -62,7 +62,7 @@ class Settings
         // non-secret config; Simply Static needs full stored credentials.
         $active = \SSD\Sources\Source_Registry::active();
         $configured = 'crawler' === $active->slug()
-            ? self::has_browser_deploy_config()
+            ? self::has_crawler_deploy_config()
             : null !== self::credentials();
         if ($configured) {
             return;
@@ -188,15 +188,25 @@ class Settings
     }
 
     /**
-     * Whether the browser crawler has enough config to attempt a deploy. The
-     * API token is optional here: it may be entered once at publish time (and
-     * not stored) when left blank.
+     * Whether the built-in crawler has enough config to attempt a deploy.
+     *
+     * The API token is optional (it may be entered once at publish and not
+     * stored). On a real install the deploy runs through the site's own PHP
+     * backend, so no relay is needed; inside WordPress Playground the browser
+     * must reach the Cloudflare API through the relay Worker, so a relay URL is
+     * required there.
      */
-    public static function has_browser_deploy_config(): bool
+    public static function has_crawler_deploy_config(): bool
     {
-        return '' !== trim((string) self::get('account_id'))
-            && '' !== trim((string) self::get('script_name'))
-            && '' !== trim((string) self::get('relay_url'));
+        $has_target = '' !== trim((string) self::get('account_id'))
+            && '' !== trim((string) self::get('script_name'));
+        if (!$has_target) {
+            return false;
+        }
+        if (self::is_playground()) {
+            return '' !== trim((string) self::get('relay_url'));
+        }
+        return true;
     }
 
     public static function add_menu(): void
@@ -327,7 +337,7 @@ class Settings
                                 name="<?php echo esc_attr(self::OPTION); ?>[relay_url]"
                                 value="<?php echo esc_attr((string) ($all['relay_url'] ?? '')); ?>" class="regular-text"
                                 placeholder="https://ssd-cloudflare-relay.example.workers.dev" />
-                            <p class="description"><?php esc_html_e('Only used by the built-in crawler. Deploy the relay Worker (see assets/crawler/worker/README.md) and paste its URL here so the browser can reach the Cloudflare API.', 'static-site-deployer'); ?></p>
+                            <p class="description"><?php esc_html_e('Only needed for the built-in crawler inside WordPress Playground. On a normal WordPress install the crawler deploys through the site\'s own backend, so you can leave this blank. Deploy the relay Worker (see assets/crawler/worker/README.md) and paste its URL here so the in-browser crawler can reach the Cloudflare API.', 'static-site-deployer'); ?></p>
                         </td>
                     </tr>
                     <tr>
