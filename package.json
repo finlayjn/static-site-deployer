@@ -1,0 +1,13 @@
+{
+  "name": "static-site-deployer-dev",
+  "private": true,
+  "type": "module",
+  "description": "Development-only tooling for Static Site Deployer (crawler test harness). Not shipped in the plugin zip.",
+  "scripts": {
+    "crawl": "node bin/crawl.mjs"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.3",
+    "linkedom": "^0.18.5"
+  }
+}

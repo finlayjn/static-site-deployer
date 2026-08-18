@@ -18,6 +18,7 @@ ZIP_PATH="${DIST_DIR}/${SLUG}.zip"
 INCLUDE=(
 	"static-site-deployer.php"
 	"src"
+	"assets"
 	"readme.txt"
 	"README.md"
 	"LICENSE"

@@ -4,36 +4,43 @@ Tags: static, cloudflare, simply static, deployment, serverless
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Export your site with Simply Static and deploy it to Cloudflare Workers static assets — automatically on save or on demand.
+Render your site to static files (built-in crawler or Simply Static) and deploy to Cloudflare Workers static assets — automatically on save or on demand.
 
 == Description ==
 
-Static Site Deployer runs a [Simply Static](https://wordpress.org/plugins/simply-static/)
-export and uploads the result to a Cloudflare Worker's static assets, giving you
-free, serverless static hosting for a WordPress site you edit locally (for
-example in Local WP or WordPress Playground).
+Static Site Deployer renders your WordPress site to static files and uploads the
+result to a Cloudflare Worker's static assets, giving you free, serverless static
+hosting for a site you edit locally (for example in Local WP or WordPress
+Playground).
 
-It re-implements the "publish to Cloudflare" idea of Simply Static Pro for free.
+It can render the site two ways: a **built-in browser crawler** that needs no
+other plugin and works even in WordPress Playground, or an existing
+[Simply Static](https://wordpress.org/plugins/simply-static/) export on a normal
+server. Either way it re-implements the "publish to Cloudflare" idea of Simply
+Static Pro for free.
 
 = Features =
 
-* Deploy automatically when a post is created, updated, or deleted — or switch to manual "Publish now".
-* Settings page for Cloudflare credentials (no need to edit wp-config.php).
-* Optional cleanup of the local export directory after a successful deploy to save disk space.
-* Uses the WordPress HTTP API (works without the cURL extension, honors proxies).
-* Keeps credentials out of WordPress Playground exports (see FAQ).
+* Built-in browser crawler — renders the site client-side, no server loopback, works in WordPress Playground.
+* Or deploy an existing Simply Static export on a normal server.
+* Direct deploy to Cloudflare Workers static assets (via a small CORS relay Worker you deploy once).
+* Choose the export source, or let the plugin pick automatically per environment.
+* Deploy automatically on create/update/delete — or manually with "Publish now" (button or admin toolbar).
+* Live deployment status and history on the settings page.
+* Store the Cloudflare token, or leave it blank to be prompted once per session (nothing stored).
+* Keeps credentials out of WordPress Playground exports and off the front end.
 
 == Installation ==
 
-1. Install and activate the free Simply Static plugin.
-2. Install and activate Static Site Deployer.
-3. Create a Cloudflare API token with the **Workers Scripts: Edit** permission.
-4. Create a Cloudflare Worker (the Hello World template is fine).
-5. Go to **Settings → Static Site Deployer** and enter your Account ID, Worker name, and API token.
+1. Install and activate Static Site Deployer. (The built-in crawler needs no other plugin. To deploy Simply Static output instead, also install Simply Static.)
+2. Create a Cloudflare API token with the **Workers Scripts: Edit** permission.
+3. Create a Cloudflare Worker (the Hello World template is fine).
+4. Deploy the CORS relay Worker in `assets/crawler/worker/` (see its README) and copy its URL.
+5. Go to **Settings → Static Site Deployer** and enter your Account ID, Worker name, relay URL, and (optionally) API token.
 
 Credentials can alternatively be defined in wp-config.php, which always takes
 precedence and is never stored in the database:
@@ -62,10 +69,22 @@ applied by recent versions.
 
 = Nothing deploys on save. =
 
-Check that Simply Static is active, credentials are set, and "Auto-publish" is
-enabled. With auto-publish off, use the "Publish now" button.
+Check that credentials (or at least the account ID, worker name, and relay URL)
+are set and "Auto-publish" is enabled. With the built-in crawler, an auto-publish
+runs in your browser — open the editor (it deploys on save) or the settings page
+to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 
 == Changelog ==
+
+= 0.3.0 =
+* Built-in browser crawler that renders the site client-side — no Simply Static or server loopback required; works in WordPress Playground.
+* Direct Cloudflare deploy from the browser via a small CORS relay Worker (stores no credentials).
+* Export source selector (Automatic / Built-in crawler / Simply Static) with an install-aware default.
+* "Publish to Cloudflare" admin-toolbar button with live percent; live status and history without refresh.
+* Auto-publish for the crawler runs in the editor on save (saving is locked until the deploy finishes).
+* Optional unstored API token (prompted once per session) and a "Clear stored token" control.
+* Security: the token is never loaded on the front end, so a logged-in crawl cannot bake it into exports.
+* Fixed: auto-publish no longer triggers on plugin updates or internal post types.
 
 = 0.2.0 =
 * Deploy status panel and history on the settings page.
@@ -82,6 +101,9 @@ enabled. With auto-publish off, use the "Publish now" button.
 * Excludes credentials from WordPress Playground exports.
 
 == Upgrade Notice ==
+
+= 0.3.0 =
+Built-in browser crawler with direct Cloudflare deploy (works in Playground), source selector, live status/history, safer token handling.
 
 = 0.2.0 =
 Playground compatibility, deploy status/history, dependency-free, and safer token storage.

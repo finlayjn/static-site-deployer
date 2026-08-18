@@ -3,6 +3,52 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-08-18
+
+### Added
+
+- **Built-in browser crawler** export source that renders the site to static
+  files client-side using same-origin `fetch`. It needs no Simply Static and no
+  server-side loopback, so it works inside WordPress Playground. Crawl fidelity
+  includes URL rewriting across attributes, `srcset`, inline CSS `url()`, and
+  image meta tags; origin-to-relative rewriting across inline scripts, JSON-LD,
+  and XML; sitemap/`robots.txt` seeding; XML feeds saved as `index.xml` with an
+  `index.html` redirect stub; a generated `404.html`; and default exclusions for
+  `wp-admin`, `wp-json`, and search feeds.
+- **Direct Cloudflare deploy from the browser**, via a small CORS relay Worker
+  (`assets/crawler/worker/`) that forwards to the Cloudflare API and stores no
+  credentials. Set its URL under **Cloudflare API relay URL**.
+- **Export source selector** (Automatic / Built-in crawler / Simply Static) with
+  an install-aware default. WordPress Playground always uses the crawler.
+- **Publish to Cloudflare** button in the admin toolbar, showing live percent.
+- Live-updating deployment status **and** history on the settings page (no
+  page refresh).
+- Auto-publish for the crawler: a content change queues a deploy that runs in the
+  block editor on save (or on the next admin page load). While it runs, saving is
+  locked until the deploy finishes.
+- Optional, unstored API token: leave the token blank to be prompted once per
+  browser session at publish (nothing is stored), plus a **Clear stored token**
+  control.
+- **Download ZIP (debug)** of the crawler output for local inspection.
+
+### Changed
+
+- Deployment is now source-agnostic: the deployer accepts a rendered directory
+  from any export source (Simply Static, or the built-in crawler).
+
+### Fixed
+
+- Auto-publish no longer triggers spurious deploys during plugin/theme/core
+  updates or on internal post types (revisions, menu items, Action Scheduler,
+  etc.).
+
+### Security
+
+- The Cloudflare API token is never enqueued on the front end — only on admin
+  pages — so a logged-in crawl cannot bake it into exported HTML. The crawler
+  also strips the admin bar and any plugin scripts from crawled pages as
+  defense-in-depth.
+
 ## [0.2.0] - 2026-08-17
 
 ### Added

@@ -2,6 +2,8 @@
 
 namespace SSD;
 
+use SSD\Sources\Source_Registry;
+
 /**
  * Stores configuration and resolves Cloudflare credentials.
  *
@@ -19,11 +21,13 @@ class Settings
 
     /** @var array<string,mixed> */
     private static $defaults = [
-        'account_id'   => '',
-        'script_name'  => '',
-        'auto_publish' => true,
-        'cleanup'      => true,
-        'sync_export'  => false,
+        'account_id'    => '',
+        'script_name'   => '',
+        'export_source' => '',
+        'relay_url'     => '',
+        'auto_publish'  => true,
+        'cleanup'       => true,
+        'sync_export'   => false,
     ];
 
     /** wp-config.php constant overrides, keyed by setting. */
@@ -51,7 +55,16 @@ class Settings
         if (!current_user_can('manage_options')) {
             return;
         }
-        if (!self::is_auto_publish() || null !== self::credentials()) {
+        if (!self::is_auto_publish()) {
+            return;
+        }
+        // The crawler can prompt for a one-time token, so it only needs the
+        // non-secret config; Simply Static needs full stored credentials.
+        $active = \SSD\Sources\Source_Registry::active();
+        $configured = 'crawler' === $active->slug()
+            ? self::has_browser_deploy_config()
+            : null !== self::credentials();
+        if ($configured) {
             return;
         }
 
@@ -174,6 +187,18 @@ class Settings
         return compact('account_id', 'api_token', 'script_name');
     }
 
+    /**
+     * Whether the browser crawler has enough config to attempt a deploy. The
+     * API token is optional here: it may be entered once at publish time (and
+     * not stored) when left blank.
+     */
+    public static function has_browser_deploy_config(): bool
+    {
+        return '' !== trim((string) self::get('account_id'))
+            && '' !== trim((string) self::get('script_name'))
+            && '' !== trim((string) self::get('relay_url'));
+    }
+
     public static function add_menu(): void
     {
         add_options_page(
@@ -205,10 +230,19 @@ class Settings
         $account_id  = sanitize_text_field($input['account_id'] ?? '');
         $script_name = sanitize_text_field($input['script_name'] ?? '');
 
-        // The token is stored separately (and excluded from exports). Only
-        // overwrite it when a new value is submitted, so saving other settings
-        // or leaving the field blank keeps the existing token.
-        if (isset($input['api_token'])) {
+        $export_source = (string) ($input['export_source'] ?? '');
+        if (!in_array($export_source, ['', 'crawler', 'simply_static'], true)) {
+            $export_source = '';
+        }
+
+        $relay_url = esc_url_raw(trim((string) ($input['relay_url'] ?? '')));
+
+        // The token is stored separately (and excluded from exports). Clearing
+        // takes precedence; otherwise only overwrite when a new value is
+        // submitted, so saving other settings keeps the existing token.
+        if (!empty($input['clear_api_token'])) {
+            delete_option(self::TOKEN_OPTION);
+        } elseif (isset($input['api_token'])) {
             $token = trim((string) $input['api_token']);
             if ('' !== $token) {
                 update_option(self::TOKEN_OPTION, $token, false);
@@ -216,11 +250,13 @@ class Settings
         }
 
         return [
-            'account_id'   => $account_id,
-            'script_name'  => $script_name,
-            'auto_publish' => !empty($input['auto_publish']),
-            'cleanup'      => !empty($input['cleanup']),
-            'sync_export'  => !empty($input['sync_export']),
+            'account_id'    => $account_id,
+            'script_name'   => $script_name,
+            'export_source' => $export_source,
+            'relay_url'     => $relay_url,
+            'auto_publish'  => !empty($input['auto_publish']),
+            'cleanup'       => !empty($input['cleanup']),
+            'sync_export'   => !empty($input['sync_export']),
         ];
     }
 
@@ -230,23 +266,23 @@ class Settings
             wp_die(esc_html__('You do not have permission to manage these settings.', 'static-site-deployer'));
         }
 
-        $all           = self::all();
-
-        $has_creds     = null !== self::credentials();
-        $simply_static = class_exists('\\Simply_Static\\Plugin');
+        $all       = self::all();
+        $has_creds = null !== self::credentials();
+        $source    = Source_Registry::active();
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Static Site Deployer', 'static-site-deployer'); ?></h1>
 
-            <?php if (!$simply_static) : ?>
+            <?php if (!$source->is_available()) : ?>
                 <div class="notice notice-error"><p>
-                    <?php esc_html_e('Simply Static is not active. Install and activate the free Simply Static plugin to enable exports.', 'static-site-deployer'); ?>
+                    <?php echo esc_html($source->unavailable_reason()); ?>
                 </p></div>
             <?php endif; ?>
 
             <form method="post" action="options.php">
                 <?php settings_fields(self::OPTION); ?>
                 <table class="form-table" role="presentation">
+                    <?php self::render_source_row($all); ?>
                     <?php self::render_credential_row('account_id', __('Cloudflare Account ID', 'static-site-deployer'), $all); ?>
                     <?php self::render_credential_row('script_name', __('Worker Name', 'static-site-deployer'), $all); ?>
                     <tr>
@@ -255,12 +291,37 @@ class Settings
                             <?php if (self::constant_defined('api_token')) : ?>
                                 <em><?php esc_html_e('Defined in wp-config.php.', 'static-site-deployer'); ?></em>
                             <?php else : ?>
+                                <?php $has_stored_token = '' !== (string) get_option(self::TOKEN_OPTION, ''); ?>
                                 <input type="password" autocomplete="new-password" id="ssd_api_token"
                                     name="<?php echo esc_attr(self::OPTION); ?>[api_token]"
                                     value="" class="regular-text"
-                                    placeholder="<?php echo esc_attr('' !== (string) get_option(self::TOKEN_OPTION, '') ? '••••••••  (leave blank to keep)' : ''); ?>" />
-                                <p class="description"><?php esc_html_e('Needs the Workers Scripts:Edit permission. Leave blank to keep the existing token.', 'static-site-deployer'); ?></p>
+                                    placeholder="<?php echo esc_attr($has_stored_token ? '••••••••  (leave blank to keep)' : 'Leave blank to be asked each time'); ?>" />
+                                <p class="description">
+                                    <?php
+                                    if ($has_stored_token) {
+                                        esc_html_e('Needs the Workers Scripts:Edit permission. Leave blank to keep the existing token.', 'static-site-deployer');
+                                    } else {
+                                        esc_html_e('Needs the Workers Scripts:Edit permission. Leave blank to be prompted for a one-time token each time you publish (nothing is stored).', 'static-site-deployer');
+                                    }
+                                    ?>
+                                </p>
+                                <?php if ('' !== (string) get_option(self::TOKEN_OPTION, '')) : ?>
+                                    <p><label>
+                                        <input type="checkbox" name="<?php echo esc_attr(self::OPTION); ?>[clear_api_token]" value="1" />
+                                        <?php esc_html_e('Clear the stored token (deploy will prompt for a one-time token).', 'static-site-deployer'); ?>
+                                    </label></p>
+                                <?php endif; ?>
                             <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="ssd_relay_url"><?php esc_html_e('Cloudflare API relay URL', 'static-site-deployer'); ?></label></th>
+                        <td>
+                            <input type="url" id="ssd_relay_url"
+                                name="<?php echo esc_attr(self::OPTION); ?>[relay_url]"
+                                value="<?php echo esc_attr((string) ($all['relay_url'] ?? '')); ?>" class="regular-text"
+                                placeholder="https://ssd-cloudflare-relay.example.workers.dev" />
+                            <p class="description"><?php esc_html_e('Only used by the built-in crawler. Deploy the relay Worker (see assets/crawler/worker/README.md) and paste its URL here so the browser can reach the Cloudflare API.', 'static-site-deployer'); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -303,23 +364,7 @@ class Settings
 
             <hr />
             <h2><?php esc_html_e('Publish now', 'static-site-deployer'); ?></h2>
-            <p><?php esc_html_e('Run a Simply Static export and deploy immediately.', 'static-site-deployer'); ?></p>
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="<?php echo esc_attr(self::PUBLISH_ACTION); ?>" />
-                <?php wp_nonce_field(self::PUBLISH_ACTION); ?>
-                <?php
-                submit_button(
-                    __('Publish now', 'static-site-deployer'),
-                    'secondary',
-                    'submit',
-                    false,
-                    ($has_creds && $simply_static) ? [] : ['disabled' => 'disabled']
-                );
-                ?>
-                <?php if (!$has_creds) : ?>
-                    <p class="description"><?php esc_html_e('Enter your Cloudflare credentials above first.', 'static-site-deployer'); ?></p>
-                <?php endif; ?>
-            </form>
+            <?php $source->render_publish_control($has_creds); ?>
 
             <hr />
             <h2><?php esc_html_e('Deployment status', 'static-site-deployer'); ?></h2>
@@ -335,10 +380,11 @@ class Settings
 
             <h2><?php esc_html_e('History', 'static-site-deployer'); ?></h2>
             <?php $history = Status::get_history(); ?>
-            <?php if (empty($history)) : ?>
-                <p><?php esc_html_e('No deployments yet.', 'static-site-deployer'); ?></p>
-            <?php else : ?>
-                <table class="widefat striped" style="max-width:720px;">
+            <div id="ssd-history">
+                <p id="ssd-history-empty" <?php echo empty($history) ? '' : 'style="display:none;"'; ?>>
+                    <?php esc_html_e('No deployments yet.', 'static-site-deployer'); ?>
+                </p>
+                <table class="widefat striped" id="ssd-history-table" style="max-width:720px;<?php echo empty($history) ? 'display:none;' : ''; ?>">
                     <thead>
                         <tr>
                             <th><?php esc_html_e('When', 'static-site-deployer'); ?></th>
@@ -346,7 +392,7 @@ class Settings
                             <th><?php esc_html_e('Message', 'static-site-deployer'); ?></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="ssd-history-body">
                         <?php foreach ($history as $entry) : ?>
                             <tr>
                                 <td><?php echo esc_html(human_time_diff((int) ($entry['time'] ?? 0)) . ' ' . __('ago', 'static-site-deployer')); ?></td>
@@ -356,7 +402,7 @@ class Settings
                         <?php endforeach; ?>
                     </tbody>
                 </table>
-            <?php endif; ?>
+            </div>
 
             <script>
             (function () {
@@ -389,6 +435,52 @@ class Settings
             })();
             </script>
         </div>
+        <?php
+    }
+
+    /**
+     * Renders the export-source selector.
+     *
+     * @param array<string,mixed> $all
+     */
+    private static function render_source_row(array $all): void
+    {
+        $stored       = (string) ($all['export_source'] ?? '');
+        $active       = Source_Registry::active();
+        $simply       = Source_Registry::get('simply_static');
+        $ss_available = null !== $simply && $simply->is_available();
+        ?>
+        <tr>
+            <th scope="row"><?php esc_html_e('Export source', 'static-site-deployer'); ?></th>
+            <td>
+                <?php if (self::is_playground()) : ?>
+                    <p><em><?php esc_html_e('WordPress Playground always uses the built-in crawler.', 'static-site-deployer'); ?></em></p>
+                <?php else : ?>
+                    <fieldset>
+                        <label>
+                            <input type="radio" name="<?php echo esc_attr(self::OPTION); ?>[export_source]" value="" <?php checked('', $stored); ?> />
+                            <?php printf(
+                                /* translators: %s: the resolved source name. */
+                                esc_html__('Automatic (currently: %s)', 'static-site-deployer'),
+                                esc_html($active->label())
+                            ); ?>
+                        </label><br />
+                        <label>
+                            <input type="radio" name="<?php echo esc_attr(self::OPTION); ?>[export_source]" value="crawler" <?php checked('crawler', $stored); ?> />
+                            <?php esc_html_e('Built-in crawler (renders in your browser)', 'static-site-deployer'); ?>
+                        </label><br />
+                        <label>
+                            <input type="radio" name="<?php echo esc_attr(self::OPTION); ?>[export_source]" value="simply_static" <?php checked('simply_static', $stored); ?> <?php echo $ss_available ? '' : 'disabled'; ?> />
+                            <?php esc_html_e('Simply Static (crawls on the server)', 'static-site-deployer'); ?>
+                            <?php if (!$ss_available) : ?>
+                                <span class="description"><?php esc_html_e('— install the Simply Static plugin to use this', 'static-site-deployer'); ?></span>
+                            <?php endif; ?>
+                        </label>
+                    </fieldset>
+                <?php endif; ?>
+                <p class="description"><?php esc_html_e('The built-in crawler needs no loopback and works in Playground. Simply Static is more battle-tested but requires working server-side loopback.', 'static-site-deployer'); ?></p>
+            </td>
+        </tr>
         <?php
     }
 

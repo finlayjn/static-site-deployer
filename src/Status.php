@@ -98,6 +98,30 @@ class Status
             wp_send_json_error([], 403);
         }
         check_ajax_referer(self::AJAX_ACTION, 'nonce');
-        wp_send_json_success(self::get_progress());
+        wp_send_json_success(
+            array_merge(
+                self::get_progress(),
+                ['history' => self::get_history_formatted()]
+            )
+        );
+    }
+
+    /**
+     * History with a human-readable relative time, for the live table refresh.
+     *
+     * @return array<int,array{when:string,status:string,message:string}>
+     */
+    public static function get_history_formatted(): array
+    {
+        $out = [];
+        foreach (self::get_history() as $entry) {
+            $time = (int) ($entry['time'] ?? 0);
+            $out[] = [
+                'when'    => $time ? human_time_diff($time) . ' ' . __('ago', 'static-site-deployer') : '',
+                'status'  => (string) ($entry['status'] ?? ''),
+                'message' => (string) ($entry['message'] ?? ''),
+            ];
+        }
+        return $out;
     }
 }

@@ -1,0 +1,9 @@
+name = "ssd-cloudflare-relay"
+main = "relay.js"
+compatibility_date = "2024-11-01"
+
+# Restrict which browser origins may use the relay. Space- or comma-separated.
+# Replace with your WordPress site origin(s). Leave unset to allow all (not
+# recommended).
+[vars]
+ALLOWED_ORIGINS = "https://your-site.example https://playground.wordpress.net"
