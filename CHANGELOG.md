@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-08-18
+
+### Fixed
+
+- **Private and draft content no longer leaks into crawler exports.** The
+  browser crawler runs inside the admin session, and in WordPress Playground the
+  in-browser server keeps that session across `fetch` calls regardless of
+  `credentials`, so private posts, drafts, and the admin bar were being rendered
+  into exported pages, archives, and feeds. The crawler now marks every fetch
+  with an `X-SSD-Export` header, and the plugin forces a logged-out render for
+  those requests (via `determine_current_user`), matching the guest view a real
+  static host would serve. Admin-ajax calls (seed list, result recording) never
+  carry the marker and stay authenticated.
+- **Redirects no longer corrupt the export.** The crawler stored fetched bytes
+  under the *requested* path, so a redirect — e.g. a redirect plugin sending `/`
+  to a post — overwrote the wrong file (turning a private post into the exported
+  homepage). Output is now keyed by the **final** URL after redirects; redirects
+  into excluded or off-site URLs are recorded as errors instead of silently
+  clobbering a file.
+
+### Changed
+
+- The API Token field now explains that the "ask each time" (blank token) flow
+  only works with the built-in crawler; Simply Static deploys server-side and
+  needs a stored token (or the `SSD_CLOUDFLARE_API_TOKEN` constant).
+
 ## [0.3.0] - 2026-08-18
 
 ### Added

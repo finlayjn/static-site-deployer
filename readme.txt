@@ -4,7 +4,7 @@ Tags: static, cloudflare, simply static, deployment, serverless
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,6 +76,11 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 
 == Changelog ==
 
+= 0.4.0 =
+* Private/draft content no longer leaks into crawler exports. The crawler now renders every page as a logged-out visitor, so private posts, drafts, and admin-only chrome are excluded from pages, archives, and feeds — even in WordPress Playground, where the in-browser server keeps the editor's session across fetches.
+* Fixed: a redirect (e.g. from a redirect plugin) sending `/` to another page no longer overwrites the wrong static file. Output is now keyed by the final URL after redirects, and redirects into skipped/off-site URLs are recorded instead of silently corrupting the export.
+* Clearer API Token help: the "ask each time" (blank token) option only applies to the built-in crawler; Simply Static needs a stored token (or the SSD_CLOUDFLARE_API_TOKEN constant).
+
 = 0.3.0 =
 * Built-in browser crawler that renders the site client-side — no Simply Static or server loopback required; works in WordPress Playground.
 * Direct Cloudflare deploy from the browser via a small CORS relay Worker (stores no credentials).
@@ -101,6 +106,9 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 * Excludes credentials from WordPress Playground exports.
 
 == Upgrade Notice ==
+
+= 0.4.0 =
+Crawler exports now render as a guest, so private/draft content stays out of pages, archives, and feeds. Redirects no longer corrupt the exported homepage.
 
 = 0.3.0 =
 Built-in browser crawler with direct Cloudflare deploy (works in Playground), source selector, live status/history, safer token handling.

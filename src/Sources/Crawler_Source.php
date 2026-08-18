@@ -20,8 +20,33 @@ class Crawler_Source implements Export_Source
     const NONCE         = 'ssd_crawler';
     const SCRIPT_HANDLE = 'ssd-crawler';
 
+    /**
+     * Request marker the crawler sends on every front-end fetch so PHP can
+     * render the page as a logged-out visitor. Header form is preferred; the
+     * query-arg form is a fallback for environments that strip custom headers.
+     */
+    const EXPORT_HEADER = 'X-SSD-Export';
+    const EXPORT_QUERY  = 'ssd_export';
+
     /** Transient flag: a content change is awaiting a browser-driven deploy. */
     const PENDING_KEY = 'ssd_pending_deploy';
+
+    /**
+     * Whether the current request is a crawler fetch that must render as a
+     * guest. The browser crawler runs inside the admin session, and in
+     * WordPress Playground the in-browser server keeps that session across
+     * `fetch` calls regardless of `credentials`, so private/draft content and
+     * the admin bar would otherwise leak into the static export. The marker lets
+     * PHP force a logged-out render for these requests only; admin-ajax calls
+     * (seeds/record) never carry it and stay authenticated.
+     */
+    public static function is_static_export_request(): bool
+    {
+        if (!empty($_SERVER['HTTP_X_SSD_EXPORT'])) {
+            return true;
+        }
+        return isset($_GET[self::EXPORT_QUERY]);
+    }
 
     public function slug(): string
     {

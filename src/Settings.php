@@ -292,14 +292,20 @@ class Settings
                                 <em><?php esc_html_e('Defined in wp-config.php.', 'static-site-deployer'); ?></em>
                             <?php else : ?>
                                 <?php $has_stored_token = '' !== (string) get_option(self::TOKEN_OPTION, ''); ?>
+                                <?php $blank_hint = $source->can_start_server_side() ? 'Required for Simply Static' : 'Leave blank to be asked each time'; ?>
                                 <input type="password" autocomplete="new-password" id="ssd_api_token"
                                     name="<?php echo esc_attr(self::OPTION); ?>[api_token]"
                                     value="" class="regular-text"
-                                    placeholder="<?php echo esc_attr($has_stored_token ? '••••••••  (leave blank to keep)' : 'Leave blank to be asked each time'); ?>" />
+                                    placeholder="<?php echo esc_attr($has_stored_token ? '••••••••  (leave blank to keep)' : $blank_hint); ?>" />
                                 <p class="description">
                                     <?php
                                     if ($has_stored_token) {
                                         esc_html_e('Needs the Workers Scripts:Edit permission. Leave blank to keep the existing token.', 'static-site-deployer');
+                                    } elseif ($source->can_start_server_side()) {
+                                        // Simply Static (and any server-side source) deploys from
+                                        // PHP, which cannot show a browser prompt, so it needs a
+                                        // token stored here or in wp-config.php.
+                                        esc_html_e('Needs the Workers Scripts:Edit permission. Simply Static deploys on the server, so it needs a token saved here (or the SSD_CLOUDFLARE_API_TOKEN constant). The "ask each time" option only works with the built-in crawler.', 'static-site-deployer');
                                     } else {
                                         esc_html_e('Needs the Workers Scripts:Edit permission. Leave blank to be prompted for a one-time token each time you publish (nothing is stored).', 'static-site-deployer');
                                     }

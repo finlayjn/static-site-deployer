@@ -81,7 +81,15 @@ function main() {
 		report('running', 5, 'Crawling…');
 		return crawlSite(
 			{
-				fetch: (url, init) => window.fetch(url, init),
+				// Mark every crawl fetch so PHP renders it as a logged-out
+				// visitor. In Playground the in-browser server keeps the editor's
+				// session across fetches, so without this private/draft content
+				// and the admin bar would be baked into the export.
+				fetch: (url, init) =>
+					window.fetch(url, {
+						...init,
+						headers: { ...(init && init.headers), 'X-SSD-Export': '1' },
+					}),
 				parseHTML: (html) => new DOMParser().parseFromString(html, 'text/html'),
 			},
 			{

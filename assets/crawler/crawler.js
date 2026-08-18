@@ -145,25 +145,44 @@ export async function crawlSite(deps, options) {
 		if (!res.ok) {
 			return;
 		}
+
+		// `fetch` transparently follows redirects, so the bytes may belong to a
+		// different URL than requested. Key the output on the FINAL URL, not the
+		// requested one — otherwise a redirect (e.g. a plugin sending `/` to a
+		// post) would overwrite the wrong file, silently corrupting the export.
+		const finalUrl = safeUrl(res.url, url);
+		if (finalUrl.href !== url.href) {
+			if (!inScope(finalUrl, base) || isExcluded(finalUrl, base)) {
+				errors.push({
+					url: url.href,
+					error: 'redirected to a skipped URL: ' + finalUrl.href,
+				});
+				return;
+			}
+			// Don't re-fetch the redirect target if it's also discovered later.
+			visited.add(finalUrl.origin + finalUrl.pathname + finalUrl.search);
+		}
+		const outPath = stripBase(finalUrl.pathname, base);
+
 		const contentType = res.headers.get('content-type') || '';
 		const buf = new Uint8Array(await res.arrayBuffer());
 
 		if (isHtml(contentType)) {
 			const doc = parseHTML(decoder.decode(buf));
-			for (const found of rewriteDocument(doc, url, base)) {
+			for (const found of rewriteDocument(doc, finalUrl, base)) {
 				enqueue(found);
 			}
-			files.set(outputPathFor(stripBase(url.pathname, base), 'index.html'), {
+			files.set(outputPathFor(outPath, 'index.html'), {
 				text: relativizeOrigin('<!DOCTYPE html>\n' + doc.documentElement.outerHTML, base),
 				contentType: 'text/html',
 			});
 			pages++;
-		} else if (isXml(contentType) || url.pathname.endsWith('.xml')) {
+		} else if (isXml(contentType) || finalUrl.pathname.endsWith('.xml')) {
 			const raw = decoder.decode(buf);
-			for (const found of extractXmlLinks(raw, url)) {
+			for (const found of extractXmlLinks(raw, finalUrl)) {
 				enqueue(found);
 			}
-			const xmlKey = outputPathFor(stripBase(url.pathname, base), 'index.xml');
+			const xmlKey = outputPathFor(outPath, 'index.xml');
 			files.set(xmlKey, {
 				text: relativizeOrigin(raw, base),
 				contentType: contentType || 'application/xml',
@@ -177,24 +196,24 @@ export async function crawlSite(deps, options) {
 				}
 			}
 			assets++;
-		} else if (contentType.includes('css') || url.pathname.endsWith('.css')) {
-			const { css, urls } = rewriteCss(decoder.decode(buf), url, base);
+		} else if (contentType.includes('css') || finalUrl.pathname.endsWith('.css')) {
+			const { css, urls } = rewriteCss(decoder.decode(buf), finalUrl, base);
 			for (const found of urls) {
 				enqueue(found);
 			}
-			files.set(outputPathFor(stripBase(url.pathname, base), 'index.html'), {
+			files.set(outputPathFor(outPath, 'index.html'), {
 				text: relativizeOrigin(css, base),
 				contentType: 'text/css',
 			});
 			assets++;
-		} else if (contentType.includes('text/') || url.pathname.endsWith('.txt')) {
-			files.set(outputPathFor(stripBase(url.pathname, base), 'index.html'), {
+		} else if (contentType.includes('text/') || finalUrl.pathname.endsWith('.txt')) {
+			files.set(outputPathFor(outPath, 'index.html'), {
 				text: relativizeOrigin(decoder.decode(buf), base),
 				contentType: contentType || 'text/plain',
 			});
 			assets++;
 		} else {
-			files.set(outputPathFor(stripBase(url.pathname, base), 'index.html'), {
+			files.set(outputPathFor(outPath, 'index.html'), {
 				bytes: buf,
 				contentType,
 			});
@@ -590,6 +609,28 @@ function resolveUrl(value, fromHref) {
 		return url;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Parses a URL string, falling back to a known-good URL when it's empty or
+ * invalid. Some `fetch` implementations leave `Response.url` blank; in that case
+ * the requested URL is the best available answer for the final location.
+ *
+ * @param {string} value
+ * @param {URL} fallback
+ * @returns {URL}
+ */
+function safeUrl(value, fallback) {
+	if (!value) {
+		return fallback;
+	}
+	try {
+		const url = new URL(value);
+		url.hash = '';
+		return url;
+	} catch {
+		return fallback;
 	}
 }
 

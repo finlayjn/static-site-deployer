@@ -3,7 +3,7 @@
  * Plugin Name:       Static Site Deployer
  * Plugin URI:        https://github.com/finlayjn/static-site-deployer
  * Description:       Render your site to static files (with a built-in browser crawler or Simply Static) and deploy to Cloudflare Workers static assets — automatically on save or on demand. Works in WordPress Playground.
- * Version:           0.3.0
+ * Version:           0.4.0
  * Requires at least: 5.9
  * Requires PHP:      7.4
  * Author:            Finlay Nathan
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SSD_VERSION', '0.3.0' );
+define( 'SSD_VERSION', '0.4.0' );
 define( 'SSD_PLUGIN_FILE', __FILE__ );
 define( 'SSD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SSD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -41,4 +41,21 @@ add_action(
 	static function () {
 		\SSD\Plugin::instance()->init();
 	}
+);
+
+// Render crawler fetches as a logged-out visitor so private/draft content and
+// admin-only chrome never reach the static export — even inside WordPress
+// Playground, where the in-browser server keeps the editor's session across
+// `fetch` calls. Registered at load (not in init) so it takes effect before the
+// current user is first resolved. No-op unless the request carries the crawler
+// export marker.
+add_filter(
+	'determine_current_user',
+	static function ( $user_id ) {
+		if ( \SSD\Sources\Crawler_Source::is_static_export_request() ) {
+			return 0;
+		}
+		return $user_id;
+	},
+	PHP_INT_MAX
 );
