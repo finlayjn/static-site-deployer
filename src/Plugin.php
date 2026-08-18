@@ -44,6 +44,9 @@ class Plugin
         // "Publish to Cloudflare" button in the admin toolbar.
         add_action('admin_bar_menu', [self::class, 'add_admin_bar_button'], 100);
 
+        // "Settings" link on the Plugins list row.
+        add_filter('plugin_action_links_' . plugin_basename(SSD_PLUGIN_FILE), [self::class, 'add_settings_link']);
+
         // Only hook post changes when auto-publish is enabled.
         if (Settings::is_auto_publish()) {
             add_action('save_post', [Deployer::class, 'maybe_run'], 20);
@@ -68,6 +71,20 @@ class Plugin
         $names   = is_array($names) ? $names : [];
         $names[] = Settings::TOKEN_OPTION;
         return $names;
+    }
+
+    /**
+     * Adds a "Settings" link to the plugin's row on the Plugins screen.
+     *
+     * @param string[] $links
+     * @return string[]
+     */
+    public static function add_settings_link($links): array
+    {
+        $url  = admin_url('options-general.php?page=' . Settings::MENU_SLUG);
+        $link = '<a href="' . esc_url($url) . '">' . esc_html__('Settings', 'static-site-deployer') . '</a>';
+        array_unshift($links, $link);
+        return $links;
     }
 
     /**

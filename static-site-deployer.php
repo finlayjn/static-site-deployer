@@ -3,7 +3,7 @@
  * Plugin Name:       Static Site Deployer
  * Plugin URI:        https://github.com/finlayjn/static-site-deployer
  * Description:       Render your site to static files (with a built-in browser crawler or Simply Static) and deploy to Cloudflare Workers static assets — automatically on save or on demand. Works in WordPress Playground.
- * Version:           0.5.0
+ * Version:           0.5.1
  * Requires at least: 5.9
  * Requires PHP:      7.4
  * Author:            Finlay Nathan
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SSD_VERSION', '0.5.0' );
+define( 'SSD_VERSION', '0.5.1' );
 define( 'SSD_PLUGIN_FILE', __FILE__ );
 define( 'SSD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SSD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

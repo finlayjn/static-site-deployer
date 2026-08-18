@@ -4,7 +4,7 @@ Tags: static, cloudflare, simply static, deployment, serverless
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,6 +76,9 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 
 == Changelog ==
 
+= 0.5.1 =
+* Added a Settings link to the plugin's row on the Plugins screen.
+
 = 0.5.0 =
 * The built-in crawler now deploys through the site's own backend on normal WordPress installs (the same server-side path Simply Static uses): the browser renders the site and hands it to PHP, which uploads to Cloudflare. No relay Worker is required on real installs, and the API token stays server-side. The relay is now only needed inside WordPress Playground.
 * The Cloudflare API relay URL setting is only needed in Playground; on a normal install it can be left blank.
@@ -110,6 +113,9 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 * Excludes credentials from WordPress Playground exports.
 
 == Upgrade Notice ==
+
+= 0.5.1 =
+Adds a Settings link on the Plugins screen.
 
 = 0.5.0 =
 The crawler now deploys through your site's own backend on normal installs, so the relay Worker is only needed in WordPress Playground and your API token stays server-side.

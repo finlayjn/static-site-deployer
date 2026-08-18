@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-08-18
+
+### Added
+
+- **Settings** link on the plugin's row on the Plugins screen.
+
 ## [0.5.0] - 2026-08-18
 
 ### Added
