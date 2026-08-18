@@ -24,6 +24,10 @@ class Plugin
         Settings::register();
         Status::register_ajax();
 
+        // Remove any token left in the shared settings option by older versions
+        // so it cannot leak into exports.
+        Settings::maybe_migrate_legacy_token();
+
         // In WordPress Playground (and other loopback-less hosts) Simply Static's
         // background queue never runs, causing an endless dispatch loop. Force
         // its inline (synchronous) processing instead.

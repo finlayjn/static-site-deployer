@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - 2026-08-17
+## [0.2.0] - 2026-08-17
 
 ### Added
 
@@ -25,6 +25,9 @@ to [Semantic Versioning](https://semver.org/).
 - Exclusion of the stored API token from WordPress Playground exports via the
   `wp2p_excluded_option_names` filter. The token lives in its own
   `ssd_api_token` option; other settings travel with the archive.
+- Migration that moves a token stored by older versions in the shared
+  `ssd_settings` option into the dedicated `ssd_api_token` option and strips it
+  from the exportable settings.
 - Build script (`bin/build.sh`) that bundles production dependencies.
 - Unit tests for the MIME helper, folder helper, and manifest builder.
 

@@ -4,7 +4,7 @@ Tags: static, cloudflare, simply static, deployment, serverless
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -46,12 +46,19 @@ precedence and is never stored in the database:
 
 = How do I keep my Cloudflare token out of a WordPress Playground export? =
 
-The API token is stored in its own option (`ssd_api_token`) that the plugin
+The API token is stored in its own option (`ssd_api_token`), which the plugin
 registers with the WordPress to Playground exporter's `wp2p_excluded_option_names`
-filter, so the token is never written to the exported database. Your other
-settings (account ID, worker name, toggles) travel with the archive. After
-importing an archive, re-enter just the token on the settings page (or provide it
-via a wp-config constant that is not committed).
+filter, so exports made with that plugin never include the token. Your other
+settings (account ID, worker name, toggles) travel with the archive; re-enter
+just the token after importing.
+
+Important: Playground's own built-in "Download as .zip" export is a separate
+feature that does not apply this filter and will include the whole database,
+including the token. When committing an archive to a public repository, export
+with the WordPress to Playground plugin (not Playground's native download), or
+provide the token via a wp-config constant you do not commit. Also make sure the
+WordPress to Playground plugin is up to date — the exclusion filter is only
+applied by recent versions.
 
 = Nothing deploys on save. =
 
@@ -59,6 +66,13 @@ Check that Simply Static is active, credentials are set, and "Auto-publish" is
 enabled. With auto-publish off, use the "Publish now" button.
 
 == Changelog ==
+
+= 0.2.0 =
+* Deploy status panel and history on the settings page.
+* WordPress Playground compatibility: run the export synchronously (no loopback).
+* Removed the Symfony MIME dependency; the plugin is now dependency-free.
+* Store the API token in a dedicated option excluded from Playground exports, and
+  migrate any token left in the shared settings option by older versions.
 
 = 0.1.0 =
 * Settings page for Cloudflare credentials (with wp-config constant override).
@@ -68,6 +82,9 @@ enabled. With auto-publish off, use the "Publish now" button.
 * Excludes credentials from WordPress Playground exports.
 
 == Upgrade Notice ==
+
+= 0.2.0 =
+Playground compatibility, deploy status/history, dependency-free, and safer token storage.
 
 = 0.1.0 =
 Adds a settings page, manual publish mode, cleanup, and hardening.

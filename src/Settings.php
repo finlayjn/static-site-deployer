@@ -115,6 +115,27 @@ class Settings
     }
 
     /**
+     * Moves a token stored under the legacy single-option scheme into the
+     * dedicated (export-excluded) token option, and strips it from the shared
+     * settings so it can no longer leak into exports.
+     */
+    public static function maybe_migrate_legacy_token(): void
+    {
+        $stored = get_option(self::OPTION, null);
+        if (!is_array($stored) || !array_key_exists('api_token', $stored)) {
+            return;
+        }
+
+        $legacy = (string) $stored['api_token'];
+        if ('' !== $legacy && '' === (string) get_option(self::TOKEN_OPTION, '')) {
+            update_option(self::TOKEN_OPTION, $legacy, false);
+        }
+
+        unset($stored['api_token']);
+        update_option(self::OPTION, $stored, false);
+    }
+
+    /**
      * Whether the site is running inside WordPress Playground, which has no
      * working PHP loopback for background processing.
      */
