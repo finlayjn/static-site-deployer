@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-08-19
+
+### Fixed
+
+- **Fatal error on admin pages when auto-publish was enabled.** The crawler's
+  script enqueue still called `Settings::has_browser_deploy_config()`, a method
+  renamed in 0.5.0, so loading any admin page (e.g. Plugins) threw an "undefined
+  method" error. It now calls `has_crawler_deploy_config()`.
+
 ## [0.5.1] - 2026-08-18
 
 ### Added

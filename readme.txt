@@ -4,7 +4,7 @@ Tags: static, cloudflare, simply static, deployment, serverless
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.5.1
+Stable tag: 0.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,6 +76,9 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 
 == Changelog ==
 
+= 0.5.2 =
+* Fixed a fatal "undefined method" error on admin pages when auto-publish was enabled (a leftover method name from the 0.5.0 rename).
+
 = 0.5.1 =
 * Added a Settings link to the plugin's row on the Plugins screen.
 
@@ -113,6 +116,9 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 * Excludes credentials from WordPress Playground exports.
 
 == Upgrade Notice ==
+
+= 0.5.2 =
+Fixes a fatal error on admin pages when auto-publish is enabled.
 
 = 0.5.1 =
 Adds a Settings link on the Plugins screen.

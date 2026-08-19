@@ -122,7 +122,7 @@ class Crawler_Source implements Export_Source
             return;
         }
         $is_settings = ('settings_page_' . Settings::MENU_SLUG === $hook);
-        $auto_ready  = Settings::is_auto_publish() && Settings::has_browser_deploy_config();
+        $auto_ready  = Settings::is_auto_publish() && Settings::has_crawler_deploy_config();
         if (!$is_settings && !$auto_ready) {
             return;
         }
