@@ -5,7 +5,7 @@
   "description": "Development-only tooling for Static Site Deployer (crawler test harness). Not shipped in the plugin zip.",
   "scripts": {
     "crawl": "node bin/crawl.mjs",
-    "test:js": "node tests/test-crawler-redirects.mjs"
+    "test:js": "node tests/test-crawler-redirects.mjs && node tests/test-crawler-fetch.mjs"
   },
   "devDependencies": {
     "fflate": "^0.8.3",

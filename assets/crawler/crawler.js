@@ -22,6 +22,8 @@
  * @property {string[]} [seedUrls]              Extra URLs to seed (resolved against baseUrl).
  * @property {number}   [concurrency]           Parallel fetches (default 2; matches Playground pool).
  * @property {number}   [maxPages]              Safety cap on fetched resources (default 5000).
+ * @property {number}   [retries]               Retries per URL on transient failures (default 2).
+ * @property {number}   [retryDelay]            Base backoff in ms between retries (default 500).
  * @property {(url: URL) => boolean} [shouldVisit]
  * @property {(p: CrawlProgress) => void} [onProgress]
  *
@@ -96,6 +98,8 @@ export async function crawlSite(deps, options) {
 		maxPages = 5000,
 		credentials = 'omit',
 		generate404 = true,
+		retries = 2,
+		retryDelay = 500,
 		shouldVisit = () => true,
 		onProgress = () => {},
 	} = options;
@@ -116,6 +120,30 @@ export async function crawlSite(deps, options) {
 	let processed = 0;
 
 	const decoder = new TextDecoder('utf-8');
+
+	// Transient failures worth retrying: a bad connection (common when crawling
+	// inside Playground) otherwise silently drops assets, leaving broken images
+	// and half-populated srcsets in the export.
+	const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+	const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	const fetchWithRetry = async (href) => {
+		let lastError;
+		for (let attempt = 0; ; attempt++) {
+			try {
+				const res = await fetchImpl(href, { credentials });
+				if (res.ok || attempt >= retries || !RETRYABLE_STATUS.has(res.status)) {
+					return res;
+				}
+			} catch (e) {
+				lastError = e;
+				if (attempt >= retries) {
+					throw lastError;
+				}
+			}
+			await sleep(retryDelay * (attempt + 1));
+		}
+	};
 
 	const enqueue = (url) => {
 		const key = url.origin + url.pathname + url.search;
@@ -141,8 +169,14 @@ export async function crawlSite(deps, options) {
 	}
 
 	const processOne = async (url) => {
-		const res = await fetchImpl(url.href, { credentials });
+		const res = await fetchWithRetry(url.href);
 		if (!res.ok) {
+			// A retryable status here means retries were exhausted — a genuine
+			// transient drop worth surfacing. Deterministic 404s/410s stay silent
+			// (optional seeds like sitemap.xsl legitimately don't exist).
+			if (RETRYABLE_STATUS.has(res.status)) {
+				errors.push({ url: url.href, error: 'HTTP ' + res.status });
+			}
 			return;
 		}
 
@@ -640,7 +674,16 @@ function safeUrl(value, fallback) {
  * @returns {boolean}
  */
 function inScope(url, base) {
-	return url.origin === base.origin && url.pathname.startsWith(base.pathname);
+	if (url.origin !== base.origin) {
+		return false;
+	}
+	if (url.pathname.startsWith(base.pathname)) {
+		return true;
+	}
+	// WordPress emits the site root without a trailing slash (home_url()), while
+	// base always has one. Treat that bare root as in scope so the home/site-title
+	// link resolves to "/" instead of being stripped to an empty (self-linking) href.
+	return base.pathname.endsWith('/') && url.pathname === base.pathname.slice(0, -1);
 }
 
 /**
@@ -667,8 +710,14 @@ function isExcluded(url, base) {
  * @returns {string}
  */
 function stripBase(pathname, base) {
-	if (base.pathname !== '/' && pathname.startsWith(base.pathname)) {
-		return '/' + pathname.slice(base.pathname.length);
+	if (base.pathname !== '/') {
+		if (pathname.startsWith(base.pathname)) {
+			return '/' + pathname.slice(base.pathname.length);
+		}
+		// Bare site root (no trailing slash) maps to the deploy root.
+		if (base.pathname.endsWith('/') && pathname === base.pathname.slice(0, -1)) {
+			return '/';
+		}
 	}
 	return pathname;
 }

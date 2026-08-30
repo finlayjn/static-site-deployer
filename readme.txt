@@ -4,7 +4,7 @@ Tags: static, cloudflare, simply static, deployment, serverless
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.5.2
+Stable tag: 0.5.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,6 +76,10 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 
 == Changelog ==
 
+= 0.5.3 =
+* Fixed: clicking the site title under a WordPress Playground URL reloaded the current page instead of going to the homepage. The home link is now rewritten to "/".
+* Fixed: images and other assets could go missing on a flaky connection. The crawler now retries transient fetch failures and records any that still fail, so exports are more reliable in Playground.
+
 = 0.5.2 =
 * Fixed a fatal "undefined method" error on admin pages when auto-publish was enabled (a leftover method name from the 0.5.0 rename).
 
@@ -116,6 +120,9 @@ to let a queued deploy run. With auto-publish off, use the "Publish now" button.
 * Excludes credentials from WordPress Playground exports.
 
 == Upgrade Notice ==
+
+= 0.5.3 =
+Fixes the site-title link reloading the current page in Playground, and makes exports more reliable on flaky connections by retrying failed fetches.
 
 = 0.5.2 =
 Fixes a fatal error on admin pages when auto-publish is enabled.

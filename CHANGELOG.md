@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-08-28
+
+### Fixed
+
+- **Clicking the site title reloaded the current page instead of going home.**
+  When rendered under a scoped WordPress Playground URL, the theme's home link
+  (which `home_url()` emits without a trailing slash) fell outside the crawl
+  base and was stripped to an empty `href`, so it self-linked. The crawler now
+  treats the bare site root as home and rewrites it to `/`.
+- **Transient fetch failures no longer silently drop assets.** On a flaky
+  connection (common inside Playground), a failed request was skipped with no
+  retry and no record — leaving broken images and half-populated `srcset`s. The
+  crawler now retries network errors and transient HTTP statuses (with backoff)
+  and records any that still fail as crawl errors.
+
 ## [0.5.2] - 2026-08-19
 
 ### Fixed
